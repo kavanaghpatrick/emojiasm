@@ -91,10 +91,14 @@ def main():
                 n=args.gpu_instances,
                 max_steps=args.max_steps,
             )
-            print(json.dumps(result, indent=2))
         except RuntimeError as e:
             print(str(e), file=sys.stderr)
             sys.exit(1)
+
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            _print_gpu_result(result)
         return
 
     if args.compile:
@@ -120,6 +124,48 @@ def main():
     except KeyboardInterrupt:
         print("\n⛔ Interrupted", file=sys.stderr)
         sys.exit(130)
+
+
+def _print_gpu_result(result: dict) -> None:
+    """Print GPU execution result in human-readable format."""
+    n = result["instances"]
+    completed = result["completed"]
+    failed = result["failed"]
+    ms = result["total_time_ms"]
+
+    # For Tier 2 (has outputs), extract numeric values from printed output
+    outputs = result.get("outputs", {})
+    if outputs:
+        values = []
+        for text in outputs.values():
+            for line in text.strip().splitlines():
+                try:
+                    values.append(float(line))
+                except ValueError:
+                    pass
+        if values:
+            import math
+            mean = sum(values) / len(values)
+            variance = sum((x - mean) ** 2 for x in values) / len(values)
+            std = math.sqrt(variance)
+            print(f"GPU: {n} instances, {completed} completed in {ms:.1f}ms")
+            print(f"  mean = {mean:.6f}")
+            print(f"  std  = {std:.6f}")
+            print(f"  min  = {min(values):.6f},  max = {max(values):.6f}")
+            return
+
+    # For Tier 1 (numeric results on stack)
+    stats = result.get("stats", {})
+    if stats and stats.get("count", 0) > 0:
+        print(f"GPU: {n} instances, {completed} completed in {ms:.1f}ms")
+        print(f"  mean = {stats['mean']:.6f}")
+        print(f"  std  = {stats['std']:.6f}")
+        print(f"  min  = {stats['min']:.6f},  max = {stats['max']:.6f}")
+    else:
+        print(f"GPU: {n} instances, {completed} completed, {failed} failed in {ms:.1f}ms")
+
+    if failed > 0:
+        print(f"  ({failed} instances failed)")
 
 
 if __name__ == "__main__":
