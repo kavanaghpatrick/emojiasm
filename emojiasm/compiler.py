@@ -49,6 +49,18 @@ _PREAMBLE_MIXED = """\
 
 /* EmojiASM AOT compiled output */
 
+/* Arena allocator — EmojiASM programs are short-lived, freed at exit */
+static char _arena[1048576];
+static int _arena_pos = 0;
+static char *_arena_alloc(int sz) {
+    if (_arena_pos + sz > (int)sizeof(_arena)) {
+        fprintf(stderr, "arena exhausted\\n"); exit(1);
+    }
+    char *p = _arena + _arena_pos;
+    _arena_pos += sz;
+    return p;
+}
+
 typedef struct { int is_str; union { double num; const char *str; }; } Val;
 
 #define STACK_MAX 4096
@@ -98,7 +110,7 @@ def _emit_inst(inst: Instruction, lines: list, fhex: str, mem: dict, numeric_onl
         else:
             A('    { Val b=POP(),a=POP();')
             A('      if (!a.is_str && !b.is_str) { PUSH_N(a.num+b.num); }')
-            A('      else { char *s=malloc(512);')
+            A('      else { char *s=_arena_alloc(512);')
             A('        if(a.is_str&&b.is_str) snprintf(s,512,"%s%s",a.str,b.str);')
             A('        else if(a.is_str){long long n=(long long)b.num;if((double)n==b.num)snprintf(s,512,"%s%lld",a.str,n);else snprintf(s,512,"%s%g",a.str,b.num);}')
             A('        else{long long n=(long long)a.num;if((double)n==a.num)snprintf(s,512,"%lld%s",n,b.str);else snprintf(s,512,"%g%s",a.num,b.str);}')
@@ -231,13 +243,13 @@ def _emit_inst(inst: Instruction, lines: list, fhex: str, mem: dict, numeric_onl
         A(f'    {{ {vtype} v=POP(); _print_val(v); printf("\\n"); }}')
 
     elif op == Op.INPUT:
-        A('    { char *buf=malloc(4096);')
+        A('    { char *buf=_arena_alloc(4096);')
         A('      if(!fgets(buf,4096,stdin)){buf[0]=0;}')
         A('      else{int l=strlen(buf);if(l>0&&buf[l-1]==\'\\n\')buf[l-1]=0;}')
         A('      PUSH_S(buf); }')
 
     elif op == Op.INPUT_NUM:
-        A('    { double v=0; if(scanf("%lf",&v)!=1)v=0; PUSH_N(v); }')
+        A('    { double v=0; if(scanf("%lf",&v)!=1){fprintf(stderr,"Invalid numeric input\\n");exit(1);} PUSH_N(v); }')
 
     elif op == Op.HALT:
         A('    exit(0);')

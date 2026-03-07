@@ -228,9 +228,16 @@ class VM:
 
                 case Op.INPUT_NUM:
                     try:
-                        self._push(int(input()))
-                    except (EOFError, ValueError):
-                        self._push(0)
+                        val = input()
+                    except EOFError:
+                        raise VMError("Invalid numeric input: <EOF>", ip, source=inst.source, func_name=func_name)
+                    try:
+                        self._push(int(val))
+                    except ValueError:
+                        try:
+                            self._push(float(val))
+                        except ValueError:
+                            raise VMError(f"Invalid numeric input: {val}", ip, source=inst.source, func_name=func_name)
 
                 case Op.HALT:
                     self.halted = True

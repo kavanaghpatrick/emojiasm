@@ -441,10 +441,10 @@ def test_input_num_pushes_integer():
 
 
 # ---------------------------------------------------------------------------
-# 20. INPUT_NUM: non-numeric input pushes 0 (graceful fallback)
+# 20. INPUT_NUM: non-numeric input raises VMError
 # ---------------------------------------------------------------------------
 
-def test_input_num_non_numeric_pushes_zero():
+def test_input_num_non_numeric_raises_vmerror():
     src = """
 📜 🏠
   🔟
@@ -452,5 +452,5 @@ def test_input_num_non_numeric_pushes_zero():
   🛑
 """
     with patch("builtins.input", return_value="not-a-number"):
-        out = run(src)
-    assert "".join(out).strip() == "0"
+        with pytest.raises(VMError, match="Invalid numeric input"):
+            run(src)

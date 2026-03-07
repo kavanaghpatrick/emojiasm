@@ -28,6 +28,11 @@ dev = ["pytest>=7", "pytest-cov"]
 testpaths = ["tests"]
 addopts = "--tb=short"
 
+[tool.mypy]
+mypy_path = "emojiasm"
+warn_return_any = true
+warn_unused_configs = true
+
 [tool.coverage.run]
 source = ["emojiasm"]
 omit = ["emojiasm/__main__.py"]
