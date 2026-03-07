@@ -38,7 +38,15 @@ class ParseError(Exception):
 
 
 def _grapheme_truncate(s: str, n: int = 10) -> str:
-    """Return at most n grapheme clusters from s, appending '...' if truncated."""
+    """Return at most n grapheme clusters from s, appending '...' if truncated.
+
+    Cluster detection walks the string codepoint-by-codepoint. A new cluster
+    starts at each non-combining character. Variation selectors (U+FE00–U+FE0F),
+    characters with a non-zero ``unicodedata.combining()`` value, and characters
+    in Unicode category 'Mn' (Non-spacing Mark) are treated as continuation
+    bytes of the preceding cluster and do not increment the cluster count.
+    Returns ``""`` immediately for an empty input string.
+    """
     if not s:
         return ""
     clusters = 0
