@@ -32,6 +32,8 @@ def main():
     ap.add_argument("--trace-steps", type=int, default=0, help="Collect trace snapshot every N steps")
     ap.add_argument("--timeout", type=int, default=0, help="Hard-kill each instance after N ms")
     ap.add_argument("--seed", type=int, default=None, help="Base seed for reproducibility")
+    ap.add_argument("--gpu", action="store_true", help="Run on GPU via Metal compute kernel")
+    ap.add_argument("--gpu-instances", type=int, default=1, help="Number of parallel GPU instances (default: 1)")
     args = ap.parse_args()
 
     if args.repl:
@@ -76,6 +78,23 @@ def main():
             max_steps=args.max_steps,
         )
         print(json.dumps(result, indent=2))
+        return
+
+    if args.gpu:
+        from .gpu import gpu_run, gpu_available
+        if not gpu_available():
+            print("GPU not available (MLX not installed or no Metal device)", file=sys.stderr)
+            sys.exit(1)
+        try:
+            result = gpu_run(
+                program,
+                n=args.gpu_instances,
+                max_steps=args.max_steps,
+            )
+            print(json.dumps(result, indent=2))
+        except RuntimeError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
         return
 
     if args.compile:
