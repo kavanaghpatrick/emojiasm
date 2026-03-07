@@ -1,0 +1,57 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "EmojiASM",
+  "scopeName": "source.emojiasm",
+  "fileTypes": ["emoji"],
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#directive" },
+    { "include": "#string" },
+    { "include": "#stack-ops" },
+    { "include": "#arithmetic" },
+    { "include": "#comparison" },
+    { "include": "#control-flow" },
+    { "include": "#io" },
+    { "include": "#memory" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.emojiasm",
+      "match": "💭.*$"
+    },
+    "directive": {
+      "name": "entity.name.function.emojiasm",
+      "match": "📜|🏷️|🏷"
+    },
+    "string": {
+      "name": "string.quoted.emojiasm",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [{ "name": "constant.character.escape.emojiasm", "match": "\\\\." }]
+    },
+    "stack-ops": {
+      "name": "keyword.operator.stack.emojiasm",
+      "match": "📥|📤|📋|🔀|🫴|🔄"
+    },
+    "arithmetic": {
+      "name": "keyword.operator.arithmetic.emojiasm",
+      "match": "➕|➖|✖️|✖|➗|🔢"
+    },
+    "comparison": {
+      "name": "keyword.operator.comparison.emojiasm",
+      "match": "🟰|📏|📐|🤝|🤙|🚫"
+    },
+    "control-flow": {
+      "name": "keyword.control.emojiasm",
+      "match": "👉|🤔|😤|📞|📲|🛑|💤"
+    },
+    "io": {
+      "name": "support.function.emojiasm",
+      "match": "📢|🖨️|🖨|💬|🎤|🔟"
+    },
+    "memory": {
+      "name": "storage.type.emojiasm",
+      "match": "💾|📂"
+    }
+  }
+}
