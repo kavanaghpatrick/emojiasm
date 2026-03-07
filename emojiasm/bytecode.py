@@ -63,6 +63,8 @@ OP_MAP: dict[Op, int] = {
     # I/O (GPU-supported subset)
     Op.PRINT:   0x50,
     Op.PRINTLN: 0x51,
+    # Random
+    Op.RANDOM:  0x60,
 }
 
 # Reverse map for disassembly / debugging
@@ -241,6 +243,7 @@ _STACK_EFFECTS: dict[Op, int] = {
     Op.LOAD:    +1,    # pushes value
     Op.PRINT:   -1,    # pops value
     Op.PRINTLN: -1,    # pops value
+    Op.RANDOM:  +1,    # pushes random float
 }
 
 
