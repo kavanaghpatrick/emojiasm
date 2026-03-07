@@ -1,5 +1,6 @@
 """Stack-based virtual machine for EmojiASM."""
 
+import random
 import sys
 from .opcodes import Op
 from .parser import Program, Function
@@ -280,6 +281,9 @@ class VM:
                 case Op.NUM2STR:
                     n = self._pop()
                     self._push(str(n))
+
+                case Op.RANDOM:
+                    self._push(random.random())
 
                 case _:
                     raise VMError(f"Unknown opcode: {op}", ip, source=inst.source, func_name=func_name)
