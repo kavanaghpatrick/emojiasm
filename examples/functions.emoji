@@ -1,0 +1,23 @@
+💭 Function call demo
+💭 Defines a "square" function and calls it
+
+📜 🏠
+  💬 "5 squared = "
+  📢
+  📥 5
+  📞 🔲
+  🖨️
+
+  💬 "12 squared = "
+  📢
+  📥 12
+  📞 🔲
+  🖨️
+
+  🛑
+
+💭 Square function: pops top of stack, pushes its square
+📜 🔲
+  📋
+  ✖️
+  📲

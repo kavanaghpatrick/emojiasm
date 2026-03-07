@@ -1,0 +1,15 @@
+💭 Basic arithmetic demo
+💭 Computes (10 + 20) * 3 and prints the result
+
+📜 🏠
+  💬 "Computing (10 + 20) * 3 = "
+  📢
+
+  📥 10
+  📥 20
+  ➕
+  📥 3
+  ✖️
+  🖨️
+
+  🛑
