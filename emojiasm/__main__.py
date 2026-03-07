@@ -49,7 +49,9 @@ def main():
         sys.exit(1)
 
     try:
-        program = parse(source)
+        base_path = os.path.dirname(os.path.abspath(args.file))
+        seen_files = {os.path.abspath(args.file)}
+        program = parse(source, base_path=base_path, _seen_files=seen_files)
     except ParseError as e:
         print(str(e), file=sys.stderr)
         sys.exit(1)

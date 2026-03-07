@@ -14,6 +14,7 @@ Structural — not instructions, not on the stack.
 | `📜 name` | Define a function named `name` (emoji). Entry point is `🏠` by default. |
 | `🏷️ name` | Define a jump label at this position in the current function. |
 | `💭 text` | Comment — ignored by the parser. |
+| `📦 name` | Import module — loads `name.emoji` and merges its functions into the current program. Resolves relative to the importing file's directory, then `EMOJIASM_PATH`. Circular imports raise a parse error. |
 
 ---
 

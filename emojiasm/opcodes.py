@@ -83,6 +83,7 @@ DIRECTIVE_LABEL = "🏷️"
 DIRECTIVE_LABEL_ALT = "🏷"
 DIRECTIVE_COMMENT = "💭"
 DIRECTIVE_DATA = "📊"
+DIRECTIVE_IMPORT = "📦"
 
 # Ops that take an argument
 OPS_WITH_ARG = {
