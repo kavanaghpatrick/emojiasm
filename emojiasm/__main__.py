@@ -1,10 +1,13 @@
 """CLI entry point for EmojiASM."""
 
 import argparse
+import os
+import subprocess
 import sys
 from .parser import parse, ParseError
 from .vm import VM, VMError
 from .disasm import disassemble
+from .compiler import compile_to_c, compile_program
 
 
 def main():
@@ -15,6 +18,9 @@ def main():
     ap.add_argument("file", help="Source file (.emoji)")
     ap.add_argument("-d", "--debug", action="store_true", help="Enable debug tracing 🔍")
     ap.add_argument("--disasm", action="store_true", help="Disassemble only, don't run 📖")
+    ap.add_argument("--compile", action="store_true", help="AOT compile to native via C and run")
+    ap.add_argument("--emit-c", action="store_true", help="Print generated C source and exit")
+    ap.add_argument("--opt", default="-O2", help="Clang optimisation flag for --compile (default: -O2)")
     ap.add_argument("--max-steps", type=int, default=1_000_000, help="Max execution steps")
     args = ap.parse_args()
 
@@ -33,6 +39,23 @@ def main():
 
     if args.disasm:
         print(disassemble(program))
+        return
+
+    if args.emit_c:
+        print(compile_to_c(program))
+        return
+
+    if args.compile:
+        try:
+            bin_path = compile_program(program, opt_level=args.opt)
+        except RuntimeError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
+        try:
+            result = subprocess.run([bin_path])
+            sys.exit(result.returncode)
+        finally:
+            os.unlink(bin_path)
         return
 
     try:

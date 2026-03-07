@@ -1,4 +1,7 @@
 # EmojiASM 🧬
+[![CI](https://github.com/kavanaghpatrick/emojiasm/actions/workflows/ci.yml/badge.svg)](https://github.com/kavanaghpatrick/emojiasm/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/emojiasm)](https://pypi.org/project/emojiasm/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
 **Assembly language made of pure emoji. No ASCII keywords. Just vibes.**
 

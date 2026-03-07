@@ -7,3 +7,10 @@ build/
 *.egg
 .pytest_cache/
 .venv/
+.coverage
+coverage.xml
+htmlcov/
+benchmarks/sum_n
+benchmarks/sum_n_runtime
+benchmarks/sum_n_runtime_O3
+kb/data/

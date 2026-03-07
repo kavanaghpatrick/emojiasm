@@ -1,0 +1,302 @@
+#!/bin/bash
+# EmojiASM Knowledge Base CLI
+# Usage: kb <command> [args...]
+
+set -euo pipefail
+
+# DB path resolution: env var → project data dir → script-relative fallback
+if [ -n "${EMOJIASM_KB:-}" ]; then
+  DB="$EMOJIASM_KB"
+elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  DB="${CLAUDE_PLUGIN_ROOT}/kb/data/emojiasm_kb.db"
+else
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  DB="${SCRIPT_DIR}/../kb/data/emojiasm_kb.db"
+fi
+
+escape_sql() { printf '%s' "$1" | sed "s/'/''/g"; }
+
+run_sql() {
+  local out rc
+  out=$(sqlite3 "$DB" "$@" 2>&1)
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    echo "ERROR: sqlite3 failed: $out" >&2
+    return $rc
+  fi
+  [ -n "$out" ] && printf '%s\n' "$out"
+  return 0
+}
+
+init_db() {
+  local schema_dir
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  schema_dir="${SCRIPT_DIR}/../kb"
+  mkdir -p "$(dirname "$DB")"
+  sqlite3 "$DB" < "${schema_dir}/schema.sql"
+  if [ -f "${schema_dir}/seed.sql" ]; then
+    sqlite3 "$DB" < "${schema_dir}/seed.sql"
+    echo "Database initialised at $DB"
+  fi
+}
+
+cmd="${1:-stats}"
+shift || true
+
+case "$cmd" in
+
+  # ── init ──────────────────────────────────────────────────────────────────
+  init)
+    if [ -f "$DB" ]; then
+      echo "Database already exists at $DB"
+      echo "Run: rm $DB && kb init   to reset"
+    else
+      init_db
+    fi
+    ;;
+
+  # ── stats ─────────────────────────────────────────────────────────────────
+  stats)
+    echo "=== EmojiASM Knowledge Base ==="
+    echo ""
+    run_sql -column -header "
+      SELECT s.name AS skill, s.title, COUNT(f.id) AS findings,
+             SUM(CASE WHEN f.confidence='verified' THEN 1 ELSE 0 END) AS verified,
+             SUM(CASE WHEN f.confidence='unverified' THEN 1 ELSE 0 END) AS needs_review
+      FROM skills s LEFT JOIN findings f ON f.skill_id=s.id
+      GROUP BY s.id ORDER BY s.id;"
+    echo ""
+    run_sql "SELECT '  Total findings: ' || COUNT(*) FROM findings;"
+    run_sql "SELECT '  Total citations: ' || COUNT(*) FROM citations;"
+    run_sql "SELECT '  Investigations: ' || COUNT(*) FROM investigations;"
+    ;;
+
+  # ── search ────────────────────────────────────────────────────────────────
+  search)
+    query="${1:-}"
+    limit=10
+    skill_filter=""
+    shift || true
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --limit) limit="$2"; shift 2 ;;
+        --skill) skill_filter="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    if [ -z "$query" ]; then
+      echo "Usage: kb search <query> [--limit N] [--skill <name>]" >&2; exit 1
+    fi
+    q=$(escape_sql "$query")
+    skill_clause=""
+    if [ -n "$skill_filter" ]; then
+      sf=$(escape_sql "$skill_filter")
+      skill_clause="AND s.name = '${sf}'"
+    fi
+    run_sql -column -header "
+      SELECT f.id, s.name AS skill, f.topic, f.confidence,
+             substr(f.claim, 1, 80) AS claim
+      FROM findings_fts fts
+      JOIN findings f ON fts.rowid = f.id
+      JOIN skills s ON f.skill_id = s.id
+      WHERE findings_fts MATCH '${q}' ${skill_clause}
+      ORDER BY bm25(findings_fts)
+      LIMIT ${limit};"
+    ;;
+
+  # ── skill ─────────────────────────────────────────────────────────────────
+  skill)
+    name="${1:-}"
+    if [ -z "$name" ]; then
+      echo "Available skills:"; run_sql "SELECT '  ' || name || ' — ' || title FROM skills ORDER BY id;"; exit 0
+    fi
+    n=$(escape_sql "$name")
+    run_sql -column -header "
+      SELECT f.id, f.topic, f.confidence, substr(f.claim,1,70) AS claim
+      FROM findings f JOIN skills s ON f.skill_id=s.id
+      WHERE s.name='${n}' ORDER BY f.topic, f.id;"
+    ;;
+
+  # ── topic ─────────────────────────────────────────────────────────────────
+  topic)
+    name="${1:-}"
+    if [ -z "$name" ]; then echo "Usage: kb topic <name>" >&2; exit 1; fi
+    n=$(escape_sql "$name")
+    run_sql -column -header "
+      SELECT f.id, s.name AS skill, f.confidence, substr(f.claim,1,70) AS claim
+      FROM findings f JOIN skills s ON f.skill_id=s.id
+      WHERE lower(f.topic) LIKE lower('%${n}%') ORDER BY s.id, f.id;"
+    ;;
+
+  # ── detail ────────────────────────────────────────────────────────────────
+  detail)
+    id="${1:-}"
+    if [ -z "$id" ]; then echo "Usage: kb detail <id>" >&2; exit 1; fi
+    run_sql "
+      SELECT '── Finding #' || f.id || ' ──────────────────────────'
+             || char(10) || 'Skill:      ' || s.name || ' / ' || f.topic
+             || char(10) || 'Confidence: ' || f.confidence
+             || char(10) || 'Date:       ' || f.date_found
+             || char(10) || 'Tags:       ' || coalesce(f.tags,'')
+             || char(10) || ''
+             || char(10) || 'CLAIM:'
+             || char(10) || f.claim
+             || char(10) || ''
+             || char(10) || 'EVIDENCE:'
+             || char(10) || coalesce(f.evidence,'(none)')
+             || char(10) || ''
+             || char(10) || 'SOURCE: ' || coalesce(f.source_title,'') || '  ' || coalesce(f.source_url,'')
+             || char(10) || 'NOTES: ' || coalesce(f.notes,'')
+      FROM findings f JOIN skills s ON f.skill_id=s.id WHERE f.id=${id};"
+    run_sql -column -header "
+      SELECT title, authors, year, venue, url FROM citations WHERE finding_id=${id};"
+    ;;
+
+  # ── add ───────────────────────────────────────────────────────────────────
+  add)
+    # kb add <skill> <topic> <claim> [evidence] [--confidence <level>] [--tags <tags>] [--source-title <t>] [--source-url <u>] [--type <type>]
+    skill_name="${1:-}"; topic="${2:-}"; claim="${3:-}"
+    if [ -z "$skill_name" ] || [ -z "$topic" ] || [ -z "$claim" ]; then
+      echo "Usage: kb add <skill> <topic> <claim> [evidence] [--confidence <level>] [--tags <t>] [--source-title <t>] [--source-url <u>] [--type <type>]" >&2
+      exit 1
+    fi
+    shift 3
+    evidence=""; confidence="unverified"; tags=""; source_title=""; source_url=""; source_type="other"; session=""
+    if [ $# -gt 0 ] && [[ "${1:-}" != --* ]]; then evidence="$1"; shift; fi
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --confidence) confidence="$2"; shift 2 ;;
+        --tags)       tags="$2"; shift 2 ;;
+        --source-title) source_title="$2"; shift 2 ;;
+        --source-url) source_url="$2"; shift 2 ;;
+        --type)       source_type="$2"; shift 2 ;;
+        --session)    session="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    sn=$(escape_sql "$skill_name"); to=$(escape_sql "$topic"); cl=$(escape_sql "$claim")
+    ev=$(escape_sql "$evidence"); ta=$(escape_sql "$tags"); st=$(escape_sql "$source_title")
+    su=$(escape_sql "$source_url"); se=$(escape_sql "$session")
+    skill_id=$(sqlite3 "$DB" "SELECT id FROM skills WHERE name='${sn}';")
+    if [ -z "$skill_id" ]; then echo "Unknown skill: $skill_name. Run: kb skill" >&2; exit 1; fi
+    new_id=$(sqlite3 "$DB" "
+      INSERT INTO findings(skill_id,topic,claim,evidence,source_title,source_url,source_type,confidence,tags,session)
+      VALUES(${skill_id},'${to}','${cl}','${ev}','${st}','${su}','${source_type}','${confidence}','${ta}','${se}');
+      SELECT last_insert_rowid();")
+    echo "Added finding #${new_id}"
+    ;;
+
+  # ── cite ──────────────────────────────────────────────────────────────────
+  cite)
+    finding_id="${1:-}"; title="${2:-}"
+    if [ -z "$finding_id" ] || [ -z "$title" ]; then
+      echo "Usage: kb cite <finding-id> <title> [--authors <a>] [--year <y>] [--url <u>] [--venue <v>]" >&2; exit 1
+    fi
+    shift 2
+    authors=""; year=""; url=""; venue=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --authors) authors="$2"; shift 2 ;;
+        --year)    year="$2"; shift 2 ;;
+        --url)     url="$2"; shift 2 ;;
+        --venue)   venue="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    ti=$(escape_sql "$title"); au=$(escape_sql "$authors"); ur=$(escape_sql "$url"); ve=$(escape_sql "$venue")
+    sqlite3 "$DB" "INSERT INTO citations(finding_id,title,authors,year,url,venue) VALUES(${finding_id},'${ti}','${au}',${year:-NULL},'${ur}','${ve}');"
+    echo "Citation added to finding #${finding_id}"
+    ;;
+
+  # ── investigation start/complete ──────────────────────────────────────────
+  investigation-start)
+    skill_name="${1:-}"; topic="${2:-investigation}"
+    sn=$(escape_sql "$skill_name"); to=$(escape_sql "$topic")
+    skill_id=$(sqlite3 "$DB" "SELECT id FROM skills WHERE name='${sn}';")
+    [ -z "$skill_id" ] && skill_id="NULL"
+    inv_id=$(sqlite3 "$DB" "INSERT INTO investigations(skill_id,topic) VALUES(${skill_id},'${to}'); SELECT last_insert_rowid();")
+    echo "$inv_id"
+    ;;
+
+  investigation-complete)
+    inv_id="${1:-}"; findings_added="${2:-0}"; queries="${3:-0}"; summary="${4:-}"
+    su=$(escape_sql "$summary")
+    sqlite3 "$DB" "UPDATE investigations SET status='completed', completed_at=datetime('now'), findings_added=${findings_added}, queries_run=${queries}, summary='${su}' WHERE id=${inv_id};"
+    echo "Investigation #${inv_id} marked complete (${findings_added} findings)"
+    ;;
+
+  # ── unverified ────────────────────────────────────────────────────────────
+  unverified)
+    run_sql -column -header "
+      SELECT f.id, s.name AS skill, f.topic, substr(f.claim,1,70) AS claim
+      FROM findings f JOIN skills s ON f.skill_id=s.id
+      WHERE f.confidence='unverified' ORDER BY s.id, f.id;"
+    ;;
+
+  # ── export ────────────────────────────────────────────────────────────────
+  export)
+    filter="${1:-}"
+    skill_clause=""; heading="All Findings"
+    if [ -n "$filter" ]; then
+      sf=$(escape_sql "$filter")
+      skill_clause="WHERE s.name='${sf}'"
+      heading="Findings: $filter"
+    fi
+    echo "# EmojiASM KB — $heading"
+    echo ""
+    prev_skill=""
+    while IFS='|' read -r id skill topic confidence claim evidence; do
+      if [ "$skill" != "$prev_skill" ]; then
+        echo "## $skill"
+        echo ""
+        prev_skill="$skill"
+      fi
+      echo "### #${id} [${confidence}] ${topic}"
+      echo "**${claim}**"
+      [ -n "$evidence" ] && echo "" && echo "${evidence}"
+      echo ""
+    done < <(sqlite3 "$DB" "
+      SELECT f.id, s.name, f.topic, f.confidence, f.claim, coalesce(f.evidence,'')
+      FROM findings f JOIN skills s ON f.skill_id=s.id ${skill_clause}
+      ORDER BY s.id, f.topic, f.id;")
+    ;;
+
+  # ── update-confidence ─────────────────────────────────────────────────────
+  verify)
+    id="${1:-}"; level="${2:-verified}"
+    if [ -z "$id" ]; then echo "Usage: kb verify <id> [confidence-level]" >&2; exit 1; fi
+    sqlite3 "$DB" "UPDATE findings SET confidence='${level}' WHERE id=${id};"
+    echo "Finding #${id} confidence set to '${level}'"
+    ;;
+
+  # ── help ──────────────────────────────────────────────────────────────────
+  help|--help|-h)
+    cat <<'HELP'
+EmojiASM Knowledge Base CLI
+
+Commands:
+  kb init                          — initialise DB from schema + seed
+  kb stats                         — overview of findings per skill
+  kb search <query> [--skill <s>] [--limit N]  — BM25 full-text search
+  kb skill [name]                  — list findings for a skill (or list skills)
+  kb topic <name>                  — find findings by topic substring
+  kb detail <id>                   — full detail for one finding
+  kb add <skill> <topic> <claim>   — add a finding
+      [evidence] [--confidence <c>] [--tags <t>]
+      [--source-title <t>] [--source-url <u>] [--type <type>]
+  kb cite <id> <title>             — attach a citation to a finding
+      [--authors <a>] [--year <y>] [--url <u>] [--venue <v>]
+  kb unverified                    — list findings needing review
+  kb verify <id> [level]           — set confidence level on a finding
+  kb export [skill]                — export findings as markdown
+  kb investigation-start <skill> <topic>   — start a research session
+  kb investigation-complete <id> <count> <queries> <summary>
+
+Skills: vm, parser, compiler, opcodes, performance, assemblers, esoteric, tooling
+Confidence: verified, high, medium, low, unverified
+HELP
+    ;;
+
+  *)
+    echo "Unknown command: $cmd. Run: kb help" >&2; exit 1 ;;
+esac

@@ -21,5 +21,17 @@ classifiers = [
 [project.scripts]
 emojiasm = "emojiasm.__main__:main"
 
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-cov"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--tb=short"
+
+[tool.coverage.run]
+source = ["emojiasm"]
+omit = ["emojiasm/__main__.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
