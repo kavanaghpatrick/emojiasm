@@ -134,3 +134,30 @@ def test_logical_or():
 def test_nop():
     out = run("📜 🏠\n  📥 42\n  💤\n  💤\n  💤\n  🖨️\n  🛑")
     assert "".join(out).strip() == "42"
+
+
+def test_deep_recursion_no_stack_overflow():
+    """Iterative dispatch must handle >1000 nested calls without RecursionError."""
+    # countdown(n): if n==0 return 0; else return countdown(n-1)
+    # 1200 nested calls exceeds CPython's default 1000-frame recursion limit.
+    src = "\n".join([
+        "📜 🏠",
+        "  📥 1200",
+        "  📞 🔽",
+        "  🖨️",
+        "  🛑",
+        "",
+        "📜 🔽",
+        "  📋",          # DUP n          → [n, n]
+        "  📥 0",
+        "  🟰",          # n == 0?        → [n, bool]
+        "  🤔 🔁",       # JZ 🔁: jump to recurse if bool==0 (n != 0)
+        "  📲",          # n == 0: return n (which is 0) ✓
+        "  🏷️ 🔁",
+        "  📥 1",
+        "  ➖",          # n - 1
+        "  📞 🔽",       # countdown(n-1), result on stack
+        "  📲",
+    ])
+    out = run(src, max_steps=5_000_000)
+    assert "".join(out).strip() == "0"
