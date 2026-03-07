@@ -8,6 +8,7 @@ from .parser import parse, ParseError
 from .vm import VM, VMError
 from .disasm import disassemble
 from .compiler import compile_to_c, compile_program
+from .repl import run_repl
 
 
 def main():
@@ -15,14 +16,22 @@ def main():
         prog="emojiasm",
         description="🧬 EmojiASM — Assembly language made of pure emoji",
     )
-    ap.add_argument("file", help="Source file (.emoji)")
+    ap.add_argument("file", nargs="?", default=None, help="Source file (.emoji)")
     ap.add_argument("-d", "--debug", action="store_true", help="Enable debug tracing 🔍")
     ap.add_argument("--disasm", action="store_true", help="Disassemble only, don't run 📖")
     ap.add_argument("--compile", action="store_true", help="AOT compile to native via C and run")
     ap.add_argument("--emit-c", action="store_true", help="Print generated C source and exit")
     ap.add_argument("--opt", default="-O2", help="Clang optimisation flag for --compile (default: -O2)")
     ap.add_argument("--max-steps", type=int, default=1_000_000, help="Max execution steps")
+    ap.add_argument("--repl", action="store_true", help="Launch interactive REPL")
     args = ap.parse_args()
+
+    if args.repl:
+        run_repl()
+        return
+
+    if args.file is None:
+        ap.error("the following arguments are required: file (or use --repl)")
 
     try:
         with open(args.file, "r", encoding="utf-8") as f:
