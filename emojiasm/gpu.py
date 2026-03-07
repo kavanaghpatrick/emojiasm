@@ -431,13 +431,11 @@ def gpu_run(
     # Conservative estimate: allow up to 64 output entries per thread.
     is_tier2 = tier == 2
     if is_tier2:
-        output_cap = n * 64
+        max_out_per_thread = 64  # max output entries per thread
     else:
-        output_cap = 0
+        max_out_per_thread = 0
 
-    # Max output entries per thread for Tier 2
-    max_out_per_thread = output_cap
-    output_cap_array = mx.array([output_cap], dtype=mx.uint32)
+    output_cap_array = mx.array([max_out_per_thread], dtype=mx.uint32)
 
     # Get (cached) kernel
     kernel = _get_kernel()
