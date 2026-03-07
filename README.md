@@ -281,6 +281,60 @@ A few tips:
 
 ---
 
+## REPL
+
+Run the interactive shell with `emojiasm --repl`:
+
+```bash
+emojiasm --repl
+```
+
+Each line is parsed and executed immediately. The stack is printed after every instruction.
+
+```
+emoji> 📥 10
+stack: [10]
+emoji> 📥 3
+stack: [10, 3]
+emoji> ➕
+stack: [13]
+emoji> :quit
+```
+
+| Command | Description |
+|---|---|
+| `:help` | List all opcodes |
+| `:mem` | Show memory cells |
+| `:reset` | Clear stack and memory |
+| `:quit` / `:exit` | Exit the REPL |
+
+---
+
+## Editor Setup
+
+### VS Code
+
+1. Open the Extensions panel → `...` menu → **Install from VSIX…** — OR — symlink into your extensions folder:
+   ```bash
+   ln -s "$(pwd)/editors/vscode" ~/.vscode/extensions/emojiasm
+   ```
+2. Reload VS Code. Files ending in `.emoji` will now have syntax highlighting.
+
+### Vim / Neovim
+
+Copy the syntax file and register the filetype:
+```bash
+mkdir -p ~/.vim/syntax
+cp editors/vim/syntax/emojiasm.vim ~/.vim/syntax/
+```
+
+Add to `~/.vim/filetype.vim` (create if it doesn't exist):
+```vim
+au BufRead,BufNewFile *.emoji set filetype=emojiasm
+```
+
+---
+
 ## License
 
 MIT
