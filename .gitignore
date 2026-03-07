@@ -10,9 +10,19 @@ build/
 .coverage
 coverage.xml
 htmlcov/
+
+# Compiled binaries from benchmarks
 benchmarks/sum_n
 benchmarks/sum_n_runtime
 benchmarks/sum_n_runtime_O3
+
+# Knowledge base (generated, large)
 kb/data/
+
+# Ralph spec state
 specs/.current-spec
 **/.progress.md
+**/.ralph-state.json
+
+# Claude worktrees
+.claude/worktrees/
