@@ -40,6 +40,7 @@ class Op(IntEnum):
     STRINDEX = auto()
     STR2NUM = auto()
     NUM2STR = auto()
+    RANDOM = auto()
 
 
 # Emoji -> Opcode mapping
@@ -83,6 +84,7 @@ EMOJI_TO_OP = {
     "🔍": Op.STRINDEX,
     "🔁": Op.STR2NUM,
     "🔤": Op.NUM2STR,
+    "🎲": Op.RANDOM,
 }
 
 # Reverse mapping for disassembly

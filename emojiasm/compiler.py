@@ -25,6 +25,7 @@ def _lbl(func_hex: str, label: str) -> str:
 _PREAMBLE_NUMERIC = """\
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 /* EmojiASM AOT compiled output (numeric-only fast path) */
 
@@ -46,6 +47,7 @@ _PREAMBLE_MIXED = """\
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 /* EmojiASM AOT compiled output */
 
@@ -303,6 +305,9 @@ def _emit_inst(inst: Instruction, lines: list, fhex: str, mem: dict, numeric_onl
             A('      if((double)n==v.num) snprintf(s,64,"%lld",n); else snprintf(s,64,"%g",v.num);')
             A('      PUSH_S(s); }')
 
+    elif op == Op.RANDOM:
+        A('    PUSH_N((double)rand() / (double)RAND_MAX);')
+
 
 # ── Main compiler entry point ───────────────────────────────────────────────
 
@@ -352,6 +357,7 @@ def compile_to_c(program: Program) -> str:
 
     # main()
     lines.append('int main(void) {')
+    lines.append('    srand(time(NULL));')
     lines.append(f'    {_fn(program.entry_point)}();')
     lines.append('    return 0;')
     lines.append('}')
