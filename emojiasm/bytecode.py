@@ -88,6 +88,7 @@ class GpuProgram:
     entry_offset: int         # bytecode offset of entry function
     max_stack_depth: int      # static analysis result
     gpu_tier: int             # 1=numeric, 2=output, 3=cpu-only
+    string_table: list[str] = field(default_factory=list)  # PRINTS string literals
 
 
 # ── GPU tier classification ──────────────────────────────────────────────
@@ -212,6 +213,26 @@ def _build_memory_map(program: Program) -> dict[str, int]:
     return {name: idx for idx, name in enumerate(sorted(cells))}
 
 
+def _build_string_table(program: Program) -> tuple[dict[str, int], list[str]]:
+    """Build a deduplicated string table from PRINTS instructions.
+
+    Returns:
+        - string -> table index mapping
+        - ordered list of unique strings
+    """
+    str_map: dict[str, int] = {}
+    table: list[str] = []
+
+    for func in program.functions.values():
+        for inst in func.instructions:
+            if inst.op == Op.PRINTS and isinstance(inst.arg, str):
+                if inst.arg not in str_map:
+                    str_map[inst.arg] = len(table)
+                    table.append(inst.arg)
+
+    return str_map, table
+
+
 # Stack depth effects for each opcode:
 #   positive = pushes, negative = pops, net = change
 _STACK_EFFECTS: dict[Op, int] = {
@@ -312,6 +333,7 @@ def compile_to_bytecode(program: Program) -> GpuProgram:
     flat_instructions, func_offsets, label_offsets = _flatten_functions(program)
     const_map, const_pool = _build_constant_pool(flat_instructions)
     mem_map = _build_memory_map(program)
+    str_map, str_table = _build_string_table(program)
     max_depth = _analyze_max_stack_depth(program)
 
     # We need to know which function each instruction belongs to for label resolution.
@@ -389,4 +411,5 @@ def compile_to_bytecode(program: Program) -> GpuProgram:
         entry_offset=func_offsets[program.entry_point],
         max_stack_depth=max_depth,
         gpu_tier=tier,
+        string_table=str_table,
     )
