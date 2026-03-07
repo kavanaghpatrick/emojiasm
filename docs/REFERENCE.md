@@ -77,6 +77,16 @@ All comparison ops consume both operands and push `1` (true) or `0` (false).
 | `🎤` | INPUT | `( -- s )` | Read line from stdin |
 | `🔟` | INPUT_NUM | `( -- n )` | Read number from stdin. Silently `0` on bad input. |
 
+### String
+
+| Emoji | Name | Stack effect | Notes |
+|:---:|---|:---:|---|
+| `🧵` | STRLEN | `( s -- n )` | Length of string |
+| `✂️` | SUBSTR | `( s start len -- s' )` | Python `s[start:start+len]`. Negative start counts from end. Also `✂`. |
+| `🔍` | STRINDEX | `( s sub -- n )` | First index of sub in s. Returns `-1` if not found. |
+| `🔁` | STR2NUM | `( s -- n )` | Parse string to int or float. **Error on invalid input.** |
+| `🔤` | NUM2STR | `( n -- s )` | Convert number to string. |
+
 ### Memory
 
 | Emoji | Name | Stack effect | Notes |
