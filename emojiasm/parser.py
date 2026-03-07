@@ -1,6 +1,8 @@
 """Parser for EmojiASM source files."""
 
 import re
+import difflib
+import unicodedata
 from dataclasses import dataclass, field
 from .opcodes import EMOJI_TO_OP, DIRECTIVE_FUNC, DIRECTIVE_LABEL, DIRECTIVE_LABEL_ALT, DIRECTIVE_COMMENT, Op, OPS_WITH_ARG
 
@@ -27,10 +29,45 @@ class Program:
 
 
 class ParseError(Exception):
-    def __init__(self, message: str, line_num: int = 0, line: str = ""):
+    def __init__(self, message: str, line_num: int = 0, line: str = "", func_name: str = ""):
         self.line_num = line_num
         self.line = line
-        super().__init__(f"💥 Line {line_num}: {message}\n   → {line}")
+        self.func_name = func_name
+        loc = f"[{func_name}] " if func_name else ""
+        super().__init__(f"💥 Line {line_num}: {loc}{message}\n   → {line}")
+
+
+def _grapheme_truncate(s: str, n: int = 10) -> str:
+    """Return at most n grapheme clusters from s, appending '...' if truncated."""
+    if not s:
+        return ""
+    clusters = 0
+    end = 0
+    i = 0
+    while i < len(s):
+        ch = s[i]
+        # Skip variation selectors (U+FE00–U+FE0F) and combining chars
+        if '\ufe00' <= ch <= '\ufe0f' or unicodedata.combining(ch) or unicodedata.category(ch) == 'Mn':
+            i += 1
+            end = i
+            continue
+        clusters += 1
+        i += 1
+        # Consume any following variation selectors or combining chars
+        while i < len(s) and ('\ufe00' <= s[i] <= '\ufe0f' or unicodedata.combining(s[i]) or unicodedata.category(s[i]) == 'Mn'):
+            i += 1
+        end = i
+        if clusters >= n:
+            break
+    if end < len(s):
+        return s[:end] + "..."
+    return s
+
+
+def _suggest_opcode(token: str) -> str:
+    """Return a 'Did you mean X?' hint if token is close to a known opcode."""
+    matches = difflib.get_close_matches(token, list(EMOJI_TO_OP.keys()), n=1, cutoff=0.6)
+    return f" Did you mean: {matches[0]}?" if matches else ""
 
 
 def _extract_string_literal(text: str) -> tuple[str, str]:
@@ -145,7 +182,15 @@ def parse(source: str) -> Program:
                 break
 
         if emoji is None:
-            raise ParseError(f"Unknown instruction: {line[:10]}...", line_num, raw_line)
+            preview = _grapheme_truncate(line, 10)
+            first_token = line.split()[0] if line.split() else line
+            hint = _suggest_opcode(first_token)
+            raise ParseError(
+                f"Unknown instruction: {preview}{hint}",
+                line_num,
+                raw_line,
+                func_name=current_func.name if current_func else "",
+            )
 
         if current_func is None:
             current_func = Function(name="🏠")
