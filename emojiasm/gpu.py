@@ -403,14 +403,14 @@ def gpu_run(
         RuntimeError: If the program uses INPUT (tier 3) or MLX is
             unavailable.
     """
-    import mlx.core as mx
-
     tier = gpu_tier(program)
     if tier == 3:
         raise RuntimeError(
             "Program uses INPUT and cannot run on GPU (tier 3). "
             "Use CPU execution instead."
         )
+
+    import mlx.core as mx
 
     t0 = time.perf_counter()
 
