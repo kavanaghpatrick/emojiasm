@@ -246,25 +246,53 @@ EmojiASM has three runtime types inherited from Python: **int**, **float**, **st
 ## CLI Reference
 
 ```
-emojiasm <file>                    Run interpreter
-emojiasm -d <file>                 Debug trace
-emojiasm --disasm <file>           Disassemble (no run)
-emojiasm --compile <file>          AOT compile + run (clang -O2)
-emojiasm --compile --opt=-O3 <file>  AOT compile with -O3
-emojiasm --emit-c <file>           Print generated C
-emojiasm --max-steps N <file>      Override step limit (default 1000000)
-emojiasm --repl                   Launch interactive REPL
-emojiasm --agent-mode <file>      JSON output with tracing
-emojiasm --agent-mode --runs 4 <file>  Parallel VM instances
+emojiasm <file>                              Run interpreter (CPU)
+emojiasm -d <file>                           Debug trace
+emojiasm --disasm <file>                     Disassemble (no run)
+emojiasm --compile <file>                    AOT compile + run (clang -O2)
+emojiasm --compile --opt=-O3 <file>          AOT compile with -O3
+emojiasm --emit-c <file>                     Print generated C
+emojiasm --max-steps N <file>                Override step limit (default 1000000)
+emojiasm --repl                              Launch interactive REPL
+emojiasm --gpu <file>                        Run on GPU (Metal via MLX)
+emojiasm --gpu --gpu-instances N <file>      N parallel GPU instances (JSON output)
+emojiasm --agent-mode <file>                 JSON output with tracing (CPU)
+emojiasm --agent-mode --runs 4 <file>        Parallel CPU VM instances
 emojiasm --agent-mode --trace-steps 10 <file>  Trace every 10 steps
 ```
 
 ---
 
-## Agent Integration
+## GPU Execution
 
-`scripts/emoji_agent_runner.py` runs N parallel EmojiASM instances and returns structured JSON.
-Uses the AOT compiler when `clang` is available; falls back to Python VM automatically.
+EmojiASM programs compile to GPU bytecode and run as Metal compute kernels on Apple Silicon via MLX.
+
+**Tiers:**
+- **Tier 1** — Numeric-only programs (no PRINT/INPUT/strings): full GPU, maximum performance
+- **Tier 2** — Programs with PRINT/PRINTLN: GPU with per-thread output buffer
+- **Tier 3** — Programs with INPUT/INPUT_NUM: automatic CPU fallback
+
+**Pipeline:** `.emoji` → `parse()` → `compile_to_bytecode()` → `mx.fast.metal_kernel()` → results
+
+**Bytecode format:** `uint32` with `[31:24]` opcode, `[23:0]` operand. Float literals in a separate constant pool.
+
+---
+
+## LLM Integration
+
+`EmojiASMTool` provides automatic GPU/CPU routing for LLM agents:
+
+```python
+from emojiasm import EmojiASMTool
+
+tool = EmojiASMTool(max_instances=10_000)
+result = tool.execute(source, n=1000)       # auto GPU/CPU
+info = tool.validate(source)                # validate without running
+spec = tool.as_tool_spec()                  # OpenAI function calling spec
+result = tool.handle_tool_call(tool_call)   # handle OpenAI tool call
+```
+
+**CPU agent runner** (for bulk CPU execution):
 
 ```
 python3 scripts/emoji_agent_runner.py program.emoji            # 1000 runs

@@ -31,12 +31,11 @@ EmojiASM:     LLM (GPU) → EmojiASM kernel (same GPU) → back to LLM
 Run 10,000 parallel EmojiASM instances on GPU in the time it takes to run 10 on CPU. The entire execution stays in Apple Silicon unified memory.
 
 ```python
-import mlx.core as mx
-import emojiasm
+from emojiasm import EmojiASMTool
 
-program = emojiasm.parse(llm_generated_source)
-results = emojiasm.gpu_run(program, n=10_000)   # one Metal dispatch, ~10ms
-mean = mx.mean(results).item()                   # still on GPU
+tool = EmojiASMTool()
+result = tool.execute(llm_generated_source, n=10_000)  # auto GPU/CPU routing
+print(result["stats"]["mean"])                          # 3.1415...
 ```
 
 ---
@@ -61,7 +60,7 @@ emojiasm --gpu --gpu-instances 10000 examples/monte_carlo_pi.emoji
 
 ## The Instruction Set
 
-36 opcodes. No ASCII keywords.
+37 opcodes. No ASCII keywords.
 
 ### Stack
 
@@ -198,14 +197,13 @@ EmojiASM's GPU backend is a **switch-dispatch bytecode interpreter kernel** — 
 
 This is based on 101 research findings from 10 parallel investigation agents, validated by 7+ published GPU VM systems (GVM, ProtonVM, Barracuda, tensorForth). See [docs/GPU_FEASIBILITY.md](docs/GPU_FEASIBILITY.md) for the full technical report.
 
-### Performance
+### Performance (Monte Carlo Pi, measured on M4 Pro)
 
-| Instances | CPU | GPU | Speedup |
-|-----------|-----|-----|---------|
-| 100 | 50ms | 2.8ms | 18x |
-| 1,000 | 500ms | 3.5ms | 143x |
-| 10,000 | 5s | 8ms | 625x |
-| 1,000,000 | 500s | 400ms | 1,250x |
+| Instances | CPU (Python VM) | GPU (Metal) | Speedup |
+|-----------|-----------------|-------------|---------|
+| 100 | 16.3s | 82ms | 199x |
+| 1,000 | 163s | 83ms | 1,964x |
+| 10,000 | ~27min | 217ms | ~4,700x |
 
 ### Why This Works
 
@@ -216,23 +214,36 @@ This is based on 101 research findings from 10 parallel investigation agents, va
 
 ---
 
-## Agent Integration
+## LLM Integration
 
-EmojiASM is designed as a tool for LLM agents. The agent runner executes N parallel instances and returns structured JSON:
+EmojiASM is designed as a tool for LLM agents. `EmojiASMTool` provides automatic GPU/CPU routing, validation, and OpenAI-compatible tool specs:
 
-```bash
-python3 scripts/emoji_agent_runner.py program.emoji --n 1000
+```python
+from emojiasm import EmojiASMTool
+
+tool = EmojiASMTool(max_instances=10_000)
+
+# Execute a program (auto-routes to GPU when beneficial)
+result = tool.execute(source, n=1000)
+# → {"success": true, "mode": "gpu", "instances": 1000, "completed": 1000,
+#    "results": [...], "stats": {"mean": 3.14, ...}, "total_time_ms": 83.2}
+
+# Validate without executing
+info = tool.validate(source)
+# → {"valid": true, "tier": 1, "gpu_compatible": true, "num_instructions": 37}
+
+# OpenAI function calling
+spec = tool.as_tool_spec()  # returns tool definition
+result = tool.handle_tool_call({"arguments": {"source": "...", "instances": 1000}})
 ```
 
-```json
-{
-  "success": true,
-  "mode": "compiled",
-  "instances": 1000,
-  "completed": 1000,
-  "results": [3.14, 3.14, 3.14, ...],
-  "stats": {"mean": 3.1415, "std": 0.016, "min": 3.08, "max": 3.20}
-}
+**Routing logic:** GPU when `n >= 256`, MLX available, and program is Tier 1-2. CPU otherwise.
+
+The CLI also supports structured JSON output:
+
+```bash
+emojiasm --gpu --gpu-instances 10000 examples/monte_carlo_pi.emoji
+emojiasm --agent-mode --runs 1000 examples/monte_carlo_pi.emoji
 ```
 
 ---
@@ -241,26 +252,27 @@ python3 scripts/emoji_agent_runner.py program.emoji --n 1000
 
 ```
 emojiasm/
+  __init__.py    Package exports (EmojiASMTool)
   __main__.py    CLI entry point
   parser.py      Emoji tokenizer + assembler
-  vm.py          Stack-based virtual machine
-  compiler.py    AOT compiler (Program → C → native)
+  vm.py          Stack-based virtual machine (CPU)
+  compiler.py    AOT compiler (Program → C → native binary)
   bytecode.py    GPU bytecode encoder (Program → uint32[])
-  gpu.py         MLX Metal kernel backend
-  agent.py       Agent mode (parallel runs, JSON output)
+  gpu.py         MLX Metal kernel backend + output buffer
+  inference.py   LLM integration (EmojiASMTool, auto GPU/CPU routing)
+  agent.py       Agent mode (parallel CPU runs, JSON output)
   repl.py        Interactive REPL
-  opcodes.py     Opcode definitions
+  opcodes.py     Opcode definitions (37 ops, 40 emoji mappings)
   disasm.py      Disassembler
+  metal/
+    vm.metal     MSL compute kernel (switch-dispatch bytecode interpreter)
 
 docs/
   REFERENCE.md       Language reference
-  GPU_FEASIBILITY.md GPU execution technical report
-
-metal/
-  vm.metal       MSL compute kernel (GPU bytecode interpreter)
+  GPU_FEASIBILITY.md GPU execution technical report (101 findings)
 
 examples/           Example .emoji programs
-tests/              500+ tests
+tests/              607 tests
 scripts/            Agent runner, KB tools
 kb/                 Knowledge base (185 findings)
 ```
