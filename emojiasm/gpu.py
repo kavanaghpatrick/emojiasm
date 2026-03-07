@@ -13,7 +13,7 @@ import time
 from functools import lru_cache
 from pathlib import Path
 
-from .bytecode import OP_MAP, compile_to_bytecode, gpu_tier, GpuProgram
+from .bytecode import OP_MAP, compile_to_bytecode, gpu_tier, GpuProgram, _build_string_table
 from .opcodes import Op
 from .parser import Program
 
@@ -223,13 +223,18 @@ def _split_kernel_source() -> tuple[str, str]:
     # (references).  We need to replace them with pointer dereferences.
     # Use word-boundary replacements to avoid hitting substrings.
     # Also, the tid comes from uint3 thread_position_in_grid in MLX.
-    body = "    uint tid = thread_position_in_grid.x;\n" + body
+    body = (
+        "    uint tid = thread_position_in_grid.x;\n"
+        "    // Cast MLX-generated uint32 pointers to proper types for output buffer\n"
+        "    device OutputEntry* output_buf = (device OutputEntry*)output_buf_raw;\n"
+        "    device uint32_t* output_counts = output_counts_raw;\n"
+    ) + body
 
     # Replace scalar reference accesses with pointer dereferences.
     # We need to be careful not to replace occurrences inside strings or
     # in contexts where they are already indexed.  The kernel uses these
     # as plain identifiers (e.g. ``if (sp >= int(stack_depth))``).
-    for scalar in ("num_insts", "stack_depth", "max_steps"):
+    for scalar in ("num_insts", "stack_depth", "max_steps", "output_cap"):
         # Replace occurrences that are NOT already followed by '['
         body = re.sub(
             rf"\b{scalar}\b(?!\s*\[)",
@@ -246,6 +251,9 @@ def _get_kernel():
 
     Returns the callable kernel object produced by ``mx.fast.metal_kernel()``.
     Raises ImportError if MLX is not available.
+
+    The kernel always accepts output buffer parameters (buffers 8-10).
+    For Tier 1 programs, output_cap is set to 0, disabling output capture.
     """
     import mlx.core as mx
 
@@ -253,8 +261,12 @@ def _get_kernel():
 
     kernel = mx.fast.metal_kernel(
         name="emojiasm_vm",
-        input_names=["bytecode", "constants", "num_insts", "stack_depth", "max_steps"],
-        output_names=["stacks", "results", "status"],
+        input_names=[
+            "bytecode", "constants",
+            "num_insts", "stack_depth", "max_steps",
+            "output_cap",
+        ],
+        output_names=["stacks", "results", "status", "output_buf_raw", "output_counts_raw"],
         source=source,
         header=header,
     )
@@ -282,6 +294,81 @@ def _stats(values: list[float]) -> dict:
         "max": max(values),
         "count": n,
     }
+
+
+# ── Output reconstruction ────────────────────────────────────────────────
+
+# Number of uint32 fields per OutputEntry struct (thread_id, seq_num, type, value-as-uint32, str_idx)
+_OUTPUT_ENTRY_FIELDS = 5
+
+
+def _format_float(v: float) -> str:
+    """Format a float value for output, using integer format when appropriate."""
+    if v == int(v) and abs(v) < 1e15:
+        return str(int(v))
+    return str(v)
+
+
+def _reconstruct_output(
+    output_data: list[int],
+    string_table: list[str],
+    n_threads: int,
+) -> dict[int, str]:
+    """Reconstruct per-thread output strings from the raw output buffer.
+
+    Args:
+        output_data: Flat list of uint32 values from the output buffer,
+            grouped as (thread_id, seq_num, type, value_bits, str_idx) per entry.
+        string_table: List of string literals for type=1 entries.
+        n_threads: Number of threads (for validation).
+
+    Returns:
+        dict mapping thread_id to the reconstructed output string.
+    """
+    import struct
+
+    if not output_data:
+        return {}
+
+    # Parse entries from flat uint32 array
+    entries: list[tuple[int, int, int, float, int]] = []
+    n_entries = len(output_data) // _OUTPUT_ENTRY_FIELDS
+    for i in range(n_entries):
+        base = i * _OUTPUT_ENTRY_FIELDS
+        thread_id = output_data[base]
+        seq_num = output_data[base + 1]
+        entry_type = output_data[base + 2]
+        # value is stored as float but represented in uint32 buffer;
+        # reinterpret the bits
+        value_bits = output_data[base + 3]
+        value = struct.unpack('f', struct.pack('I', value_bits))[0]
+        str_idx = output_data[base + 4]
+
+        # Skip empty/padding entries (thread_id=0, seq_num=0, type=0, value=0)
+        # when they appear beyond the actual written entries
+        entries.append((thread_id, seq_num, entry_type, value, str_idx))
+
+    # Sort by (thread_id, seq_num) for correct per-thread ordering
+    entries.sort(key=lambda e: (e[0], e[1]))
+
+    # Build per-thread output strings
+    outputs: dict[int, str] = {}
+    for thread_id, seq_num, entry_type, value, str_idx in entries:
+        if thread_id not in outputs:
+            outputs[thread_id] = ""
+
+        if entry_type == 0:
+            # Float value
+            outputs[thread_id] += _format_float(value)
+        elif entry_type == 1:
+            # String from table
+            if str_idx < len(string_table):
+                outputs[thread_id] += string_table[str_idx]
+        elif entry_type == 2:
+            # Newline marker
+            outputs[thread_id] += "\n"
+
+    return outputs
 
 
 # ── Main GPU execution ──────────────────────────────────────────────────
@@ -339,17 +426,52 @@ def gpu_run(
     stack_depth_array = mx.array([stack_depth], dtype=mx.uint32)
     max_steps_array = mx.array([max_steps], dtype=mx.uint32)
 
+    # Output buffer sizing for Tier 2
+    # Each PRINT/PRINTLN generates 1-2 entries per thread.
+    # Conservative estimate: allow up to 64 output entries per thread.
+    is_tier2 = tier == 2
+    if is_tier2:
+        output_cap = n * 64
+    else:
+        output_cap = 0
+
+    # Max output entries per thread for Tier 2
+    max_out_per_thread = output_cap
+    output_cap_array = mx.array([output_cap], dtype=mx.uint32)
+
     # Get (cached) kernel
     kernel = _get_kernel()
 
     # Dispatch
     tg_size = min(n, DEFAULT_THREADGROUP_SIZE)
+
+    # Output buffer: each OutputEntry is 5 uint32s (per-thread slots)
+    # Total buffer size: n_threads * max_out_per_thread * fields_per_entry
+    total_output_entries = n * max_out_per_thread if max_out_per_thread > 0 else 0
+    output_buf_size = max(total_output_entries * _OUTPUT_ENTRY_FIELDS, 1)
+
     outputs = kernel(
-        inputs=[bc_array, const_array, num_insts_array, stack_depth_array, max_steps_array],
+        inputs=[
+            bc_array, const_array,
+            num_insts_array, stack_depth_array, max_steps_array,
+            output_cap_array,
+        ],
         grid=(n, 1, 1),
         threadgroup=(tg_size, 1, 1),
-        output_shapes=[(n * stack_depth,), (n,), (n,)],
-        output_dtypes=[mx.float32, mx.float32, mx.uint32],
+        output_shapes=[
+            (n * stack_depth,),     # stacks
+            (n,),                   # results
+            (n,),                   # status
+            (output_buf_size,),     # output_buf (as flat uint32)
+            (max(n, 1),),           # output_counts (per-thread entry counts)
+        ],
+        output_dtypes=[
+            mx.float32,   # stacks
+            mx.float32,   # results
+            mx.uint32,    # status
+            mx.uint32,    # output_buf
+            mx.uint32,    # output_counts
+        ],
     )
 
     # Force GPU execution
@@ -358,7 +480,7 @@ def gpu_run(
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
     # Parse results
-    stacks_out, results_out, status_out = outputs
+    stacks_out, results_out, status_out, output_buf_out, output_counts_out = outputs
     results_list = results_out.tolist()
     status_list = status_out.tolist()
 
@@ -368,7 +490,7 @@ def gpu_run(
     # Collect valid results (status == 0)
     valid_results = [r for r, s in zip(results_list, status_list) if s == 0]
 
-    return {
+    result = {
         "success": failed == 0,
         "mode": "gpu",
         "instances": n,
@@ -378,6 +500,27 @@ def gpu_run(
         "stats": _stats(valid_results),
         "total_time_ms": round(elapsed_ms, 2),
     }
+
+    # Tier 2: reconstruct per-thread output from buffer
+    if is_tier2:
+        counts = output_counts_out.tolist()
+        raw_buf = output_buf_out.tolist()
+        # Extract only the valid entries for each thread
+        raw_data: list[int] = []
+        for tid in range(n):
+            entry_count = int(counts[tid])
+            if entry_count > 0:
+                base = tid * max_out_per_thread * _OUTPUT_ENTRY_FIELDS
+                for e in range(entry_count):
+                    offset = base + e * _OUTPUT_ENTRY_FIELDS
+                    raw_data.extend(raw_buf[offset:offset + _OUTPUT_ENTRY_FIELDS])
+        result["outputs"] = _reconstruct_output(
+            raw_data,
+            gpu_prog.string_table,
+            n,
+        )
+
+    return result
 
 
 # ── Auto-select GPU or CPU ──────────────────────────────────────────────

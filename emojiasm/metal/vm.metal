@@ -76,6 +76,16 @@ constant int CALL_STACK_DEPTH = 16;
 // Memory cells per thread (thread-local array)
 constant int NUM_MEMORY_CELLS = 32;
 
+// ── Output buffer entry (Tier 2 output capture) ────────────────────────
+
+struct OutputEntry {
+    uint32_t thread_id;
+    uint32_t seq_num;    // per-thread ordering
+    uint32_t type;       // 0=float, 1=string_index, 2=newline
+    float    value;      // for type=0
+    uint32_t str_idx;    // for type=1
+};
+
 // ── Philox-4x32-10 PRNG (counter-based, GPU-friendly) ──────────────────
 //
 // Implements the Philox-4x32-10 algorithm for high-quality random numbers.
@@ -174,6 +184,9 @@ kernel void emojiasm_vm(
     constant uint32_t&     num_insts   [[buffer(5)]],
     constant uint32_t&     stack_depth [[buffer(6)]],
     constant uint32_t&     max_steps   [[buffer(7)]],
+    device OutputEntry*    output_buf  [[buffer(8)]],   // Tier 2: per-thread output slots
+    device uint32_t*       output_counts [[buffer(9)]],  // Tier 2: entries written per thread
+    constant uint32_t&     output_cap  [[buffer(10)]],  // Tier 2: max entries per thread (0 = disabled)
     uint                   tid         [[thread_position_in_grid]]
 )
 {
@@ -210,6 +223,9 @@ kernel void emojiasm_vm(
     rng.counter[3] = 0;
     rng.key[0] = tid;
     rng.key[1] = 0x12345678u;  // fixed salt for reproducibility
+
+    // Per-thread output sequence counter (Tier 2 output ordering)
+    uint32_t my_seq = 0;
 
     // ── Main dispatch loop ──────────────────────────────────────────────
 
@@ -543,8 +559,20 @@ kernel void emojiasm_vm(
                 running = false;
                 break;
             }
-            sp--;
-            // Value discarded on GPU -- output captured via results buffer
+            if (output_cap > 0 && my_seq < output_cap) {
+                // Tier 2: capture value in per-thread output slot
+                uint32_t pos = tid * output_cap + my_seq;
+                output_buf[pos].thread_id = tid;
+                output_buf[pos].seq_num = my_seq;
+                output_buf[pos].type = 0;
+                output_buf[pos].value = stack[sp - 1];
+                output_buf[pos].str_idx = 0;
+                my_seq++;
+                results[tid] = stack[--sp];
+            } else {
+                // Tier 1 fallback or overflow: just discard (legacy behavior)
+                sp--;
+            }
             break;
         }
 
@@ -554,8 +582,28 @@ kernel void emojiasm_vm(
                 running = false;
                 break;
             }
-            sp--;
-            // Value discarded on GPU -- output captured via results buffer
+            if (output_cap > 0 && my_seq + 1 < output_cap) {
+                // Tier 2: capture value + newline in per-thread output slots
+                uint32_t base_pos = tid * output_cap + my_seq;
+                output_buf[base_pos].thread_id = tid;
+                output_buf[base_pos].seq_num = my_seq;
+                output_buf[base_pos].type = 0;
+                output_buf[base_pos].value = stack[sp - 1];
+                output_buf[base_pos].str_idx = 0;
+                my_seq++;
+                // Newline entry
+                uint32_t nl_pos = tid * output_cap + my_seq;
+                output_buf[nl_pos].thread_id = tid;
+                output_buf[nl_pos].seq_num = my_seq;
+                output_buf[nl_pos].type = 2;
+                output_buf[nl_pos].value = 0.0f;
+                output_buf[nl_pos].str_idx = 0;
+                my_seq++;
+                results[tid] = stack[--sp];
+            } else {
+                // Tier 1 fallback or overflow: just discard (legacy behavior)
+                sp--;
+            }
             break;
         }
 
@@ -591,5 +639,10 @@ kernel void emojiasm_vm(
         results[tid] = stack[sp - 1];
     } else {
         results[tid] = 0.0f;
+    }
+
+    // Store how many output entries this thread wrote (Tier 2)
+    if (output_cap > 0) {
+        output_counts[tid] = my_seq;
     }
 }
