@@ -1,0 +1,46 @@
+💭 String Operations Demo
+💭 Demonstrates all 5 string ops: STRLEN, SUBSTR, STRINDEX, STR2NUM, NUM2STR
+
+📜 🏠
+
+💭 ── STRLEN ──
+💬 "Length of 'hello': "
+📢
+💬 "hello"
+🧵
+🖨️
+
+💭 ── SUBSTR ──
+💬 "Substr 'hello world'[6:6+5]: "
+📢
+💬 "hello world"
+📥 6
+📥 5
+✂️
+🖨️
+
+💭 ── STRINDEX ──
+💬 "Index of 'world' in 'hello world': "
+📢
+💬 "hello world"
+💬 "world"
+🔍
+🖨️
+
+💭 ── STR2NUM ──
+💬 "Parse '42' + 8 = "
+📢
+💬 "42"
+🔁
+📥 8
+➕
+🖨️
+
+💭 ── NUM2STR ──
+💬 "Convert 3.14 to string: "
+📢
+📥 3.14
+🔤
+🖨️
+
+🛑

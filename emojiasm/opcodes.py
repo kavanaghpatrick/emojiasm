@@ -35,6 +35,11 @@ class Op(IntEnum):
     INPUT_NUM = auto()
     HALT = auto()
     NOP = auto()
+    STRLEN = auto()
+    SUBSTR = auto()
+    STRINDEX = auto()
+    STR2NUM = auto()
+    NUM2STR = auto()
 
 
 # Emoji -> Opcode mapping
@@ -72,6 +77,12 @@ EMOJI_TO_OP = {
     "🔟": Op.INPUT_NUM,
     "🛑": Op.HALT,
     "💤": Op.NOP,
+    "🧵": Op.STRLEN,
+    "✂️": Op.SUBSTR,
+    "✂": Op.SUBSTR,
+    "🔍": Op.STRINDEX,
+    "🔁": Op.STR2NUM,
+    "🔤": Op.NUM2STR,
 }
 
 # Reverse mapping for disassembly

@@ -246,6 +246,41 @@ class VM:
                 case Op.NOP:
                     pass
 
+                case Op.STRLEN:
+                    s = self._pop()
+                    if not isinstance(s, str):
+                        raise VMError("STRLEN requires a string", ip, source=inst.source, func_name=func_name)
+                    self._push(len(s))
+
+                case Op.SUBSTR:
+                    length = self._pop()
+                    start = self._pop()
+                    s = self._pop()
+                    if not isinstance(s, str):
+                        raise VMError("SUBSTR requires a string", ip, source=inst.source, func_name=func_name)
+                    self._push(s[int(start):int(start)+int(length)])
+
+                case Op.STRINDEX:
+                    sub = self._pop()
+                    s = self._pop()
+                    self._push(str(s).find(str(sub)))
+
+                case Op.STR2NUM:
+                    s = self._pop()
+                    if not isinstance(s, str):
+                        raise VMError("STR2NUM requires a string", ip, source=inst.source, func_name=func_name)
+                    try:
+                        self._push(int(s))
+                    except ValueError:
+                        try:
+                            self._push(float(s))
+                        except ValueError:
+                            raise VMError(f"STR2NUM: cannot parse '{s}' as number", ip, source=inst.source, func_name=func_name)
+
+                case Op.NUM2STR:
+                    n = self._pop()
+                    self._push(str(n))
+
                 case _:
                     raise VMError(f"Unknown opcode: {op}", ip, source=inst.source, func_name=func_name)
 

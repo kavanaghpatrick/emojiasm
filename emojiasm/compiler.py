@@ -83,7 +83,7 @@ static void _print_val(Val v) {
 def _uses_strings(program: Program) -> bool:
     for func in program.functions.values():
         for inst in func.instructions:
-            if inst.op in (Op.PRINTS, Op.INPUT):
+            if inst.op in (Op.PRINTS, Op.INPUT, Op.STRLEN, Op.SUBSTR, Op.STRINDEX, Op.STR2NUM, Op.NUM2STR):
                 return True
     return False
 
@@ -256,6 +256,52 @@ def _emit_inst(inst: Instruction, lines: list, fhex: str, mem: dict, numeric_onl
 
     elif op == Op.NOP:
         pass  # nothing
+
+    elif op == Op.STRLEN:
+        if numeric_only:
+            pass  # won't appear in numeric-only programs
+        else:
+            A('    { Val v=POP(); PUSH_N((double)strlen(v.str)); }')
+
+    elif op == Op.SUBSTR:
+        if numeric_only:
+            pass
+        else:
+            A('    { Val vlen=POP(), vstart=POP(), vs=POP();')
+            A('      int slen=(int)strlen(vs.str), start=(int)vstart.num, len=(int)vlen.num;')
+            A('      if(start<0) start=slen+start;')
+            A('      if(start<0) start=0; if(start>slen) start=slen;')
+            A('      if(start+len>slen) len=slen-start; if(len<0) len=0;')
+            A('      char *r=malloc(len+1); memcpy(r,vs.str+start,len); r[len]=0;')
+            A('      PUSH_S(r); }')
+
+    elif op == Op.STRINDEX:
+        if numeric_only:
+            pass
+        else:
+            A('    { Val sub=POP(), vs=POP();')
+            A('      const char *p=strstr(vs.str,sub.str);')
+            A('      PUSH_N(p ? (double)(p-vs.str) : -1.0); }')
+
+    elif op == Op.STR2NUM:
+        if numeric_only:
+            pass
+        else:
+            A('    { Val v=POP(); char *end; double n=strtod(v.str,&end);')
+            A('      if(end==v.str){fprintf(stderr,"STR2NUM: cannot parse \'%s\' as number\\n",v.str);exit(1);}')
+            A('      PUSH_N(n); }')
+
+    elif op == Op.NUM2STR:
+        if numeric_only:
+            A('    { double v=POP(); char *s=malloc(64);')
+            A('      long long n=(long long)v;')
+            A('      if((double)n==v) snprintf(s,64,"%lld",n); else snprintf(s,64,"%g",v);')
+            A('      PUSH_N(0); _sp--; PUSH_S(s); }')
+        else:
+            A('    { Val v=POP(); char *s=malloc(64);')
+            A('      long long n=(long long)v.num;')
+            A('      if((double)n==v.num) snprintf(s,64,"%lld",n); else snprintf(s,64,"%g",v.num);')
+            A('      PUSH_S(s); }')
 
 
 # ── Main compiler entry point ───────────────────────────────────────────────
