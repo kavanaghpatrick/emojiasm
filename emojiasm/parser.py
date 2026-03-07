@@ -1,10 +1,11 @@
 """Parser for EmojiASM source files."""
 
+import os
 import re
 import difflib
 import unicodedata
 from dataclasses import dataclass, field
-from .opcodes import EMOJI_TO_OP, DIRECTIVE_FUNC, DIRECTIVE_LABEL, DIRECTIVE_LABEL_ALT, DIRECTIVE_COMMENT, Op, OPS_WITH_ARG
+from .opcodes import EMOJI_TO_OP, DIRECTIVE_FUNC, DIRECTIVE_LABEL, DIRECTIVE_LABEL_ALT, DIRECTIVE_COMMENT, DIRECTIVE_IMPORT, Op, OPS_WITH_ARG
 
 
 @dataclass
@@ -148,11 +149,61 @@ def _parse_arg(text: str, op: Op, line_num: int, line: str):
     return text
 
 
-def parse(source: str) -> Program:
-    """Parse EmojiASM source code into a Program."""
+def _resolve_import(name: str, base_path: str, line_num: int, raw_line: str) -> str:
+    """Resolve an import name to an absolute file path.
+
+    Searches for ``name.emoji`` in *base_path* first, then each directory
+    listed in the ``EMOJIASM_PATH`` environment variable (colon-separated).
+    Returns the absolute path of the first match, or raises ``ParseError``.
+    """
+    filename = f"{name}.emoji"
+
+    # 1. Check relative to importing file's directory (or cwd)
+    if base_path:
+        candidate = os.path.join(base_path, filename)
+    else:
+        candidate = os.path.join(os.getcwd(), filename)
+    if os.path.isfile(candidate):
+        return os.path.abspath(candidate)
+
+    # 2. Check EMOJIASM_PATH
+    env_path = os.environ.get("EMOJIASM_PATH", "")
+    if env_path:
+        for directory in env_path.split(os.pathsep):
+            directory = directory.strip()
+            if not directory:
+                continue
+            candidate = os.path.join(directory, filename)
+            if os.path.isfile(candidate):
+                return os.path.abspath(candidate)
+
+    raise ParseError(
+        f"Cannot find module '{name}' ({filename})",
+        line_num,
+        raw_line,
+    )
+
+
+def parse(source: str, base_path: str = "", _seen_files: set | None = None) -> Program:
+    """Parse EmojiASM source code into a Program.
+
+    Parameters
+    ----------
+    source : str
+        The EmojiASM source text.
+    base_path : str
+        Directory used to resolve ``📦 name`` import directives.  When empty,
+        the current working directory is used as fallback.
+    _seen_files : set or None
+        Internal — tracks already-visited file paths to detect circular
+        imports.  Callers should not pass this.
+    """
     program = Program()
     current_func = None
     lines = source.split("\n")
+
+    if _seen_files is None:
+        _seen_files = set()
 
     for line_num, raw_line in enumerate(lines, 1):
         line = raw_line.strip()
@@ -161,6 +212,44 @@ def parse(source: str) -> Program:
             continue
 
         if line.startswith(DIRECTIVE_COMMENT):
+            continue
+
+        # --- import directive ---
+        if line.startswith(DIRECTIVE_IMPORT):
+            name = line[len(DIRECTIVE_IMPORT):].strip()
+            if not name:
+                raise ParseError("Import requires a module name", line_num, raw_line)
+
+            resolved = _resolve_import(name, base_path, line_num, raw_line)
+
+            if resolved in _seen_files:
+                raise ParseError(
+                    f"Circular import detected: {name} ({resolved})",
+                    line_num,
+                    raw_line,
+                )
+
+            try:
+                with open(resolved, "r", encoding="utf-8") as f:
+                    imported_source = f.read()
+            except OSError as exc:
+                raise ParseError(
+                    f"Cannot read module '{name}': {exc}",
+                    line_num,
+                    raw_line,
+                )
+
+            imported_base = os.path.dirname(resolved)
+            # Pass a copy with the resolved file added so that sibling
+            # imports (diamond pattern) don't falsely trigger circular
+            # detection, while ancestor chains still do.
+            child_seen = _seen_files | {resolved}
+            imported_program = parse(imported_source, base_path=imported_base, _seen_files=child_seen)
+
+            # Merge imported functions into current program (last-wins on conflict)
+            for fname, func in imported_program.functions.items():
+                program.functions[fname] = func
+
             continue
 
         if line.startswith(DIRECTIVE_FUNC):
