@@ -14,3 +14,5 @@ benchmarks/sum_n
 benchmarks/sum_n_runtime
 benchmarks/sum_n_runtime_O3
 kb/data/
+specs/.current-spec
+**/.progress.md
