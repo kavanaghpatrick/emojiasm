@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "emojiasm"
@@ -17,6 +17,9 @@ classifiers = [
     "Topic :: Software Development :: Assemblers",
     "Programming Language :: Python :: 3",
 ]
+
+[tool.setuptools.packages.find]
+include = ["emojiasm*"]
 
 [project.scripts]
 emojiasm = "emojiasm.__main__:main"
