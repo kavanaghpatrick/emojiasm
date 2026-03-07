@@ -6,8 +6,13 @@ from .parser import Program, Function
 
 
 class VMError(Exception):
-    def __init__(self, message: str, ip: int = -1):
-        super().__init__(f"💀 Runtime error at IP={ip}: {message}")
+    def __init__(self, message: str, ip: int = -1, source: str = "", func_name: str = ""):
+        self.ip = ip
+        self.source = source
+        self.func_name = func_name
+        loc = f" in {func_name}" if func_name else ""
+        src = f"\n   → {source}" if source else ""
+        super().__init__(f"💀 Runtime error at IP={ip}{loc}: {message}{src}")
 
 
 class VM:
@@ -108,7 +113,7 @@ class VM:
                 case Op.DIV:
                     b, a = self._pop(), self._pop()
                     if b == 0:
-                        raise VMError("Division by zero ➗💥", ip)
+                        raise VMError("Division by zero ➗💥", ip, source=inst.source, func_name=func_name)
                     if isinstance(a, int) and isinstance(b, int):
                         self._push(a // b)
                     else:
@@ -117,7 +122,7 @@ class VM:
                 case Op.MOD:
                     b, a = self._pop(), self._pop()
                     if b == 0:
-                        raise VMError("Modulo by zero 🔢💥", ip)
+                        raise VMError("Modulo by zero 🔢💥", ip, source=inst.source, func_name=func_name)
                     self._push(a % b)
 
                 case Op.PRINT:
@@ -145,12 +150,12 @@ class VM:
 
                 case Op.OVER:
                     if len(self.stack) < 2:
-                        raise VMError("Stack needs at least 2 elements for OVER", ip)
+                        raise VMError("Stack needs at least 2 elements for OVER", ip, source=inst.source, func_name=func_name)
                     self._push(self.stack[-2])
 
                 case Op.ROT:
                     if len(self.stack) < 3:
-                        raise VMError("Stack needs at least 3 elements for ROT", ip)
+                        raise VMError("Stack needs at least 3 elements for ROT", ip, source=inst.source, func_name=func_name)
                     c, b, a = self._pop(), self._pop(), self._pop()
                     self._push(b)
                     self._push(c)
@@ -198,12 +203,12 @@ class VM:
 
                 case Op.LOAD:
                     if arg not in self.memory:
-                        raise VMError(f"Memory address '{arg}' not initialized 📂❌", ip)
+                        raise VMError(f"Memory address '{arg}' not initialized 📂❌", ip, source=inst.source, func_name=func_name)
                     self._push(self.memory[arg])
 
                 case Op.CALL:
                     if arg not in self.program.functions:
-                        raise VMError(f"Function '{arg}' not found", ip)
+                        raise VMError(f"Function '{arg}' not found", ip, source=inst.source, func_name=func_name)
                     self.call_stack.append((func_name, next_ip))
                     func_name = arg
                     func = self.program.functions[func_name]
@@ -235,6 +240,6 @@ class VM:
                     pass
 
                 case _:
-                    raise VMError(f"Unknown opcode: {op}", ip)
+                    raise VMError(f"Unknown opcode: {op}", ip, source=inst.source, func_name=func_name)
 
             ip = next_ip
