@@ -61,7 +61,7 @@ emojiasm --gpu --gpu-instances 10000 examples/monte_carlo_pi.emoji
 
 ## The Instruction Set
 
-35 opcodes. No ASCII keywords.
+36 opcodes. No ASCII keywords.
 
 ### Stack
 
@@ -83,6 +83,7 @@ emojiasm --gpu --gpu-instances 10000 examples/monte_carlo_pi.emoji
 | ✖️ | MUL | `( a b -- a*b )` |
 | ➗ | DIV | `( a b -- a/b )` |
 | 🔢 | MOD | `( a b -- a%b )` |
+| 🎲 | RANDOM | `( -- float )` |
 
 ### Comparison & Logic
 
@@ -116,6 +117,16 @@ emojiasm --gpu --gpu-instances 10000 examples/monte_carlo_pi.emoji
 | 💬 "text" | PRINTS | Push string literal |
 | 🎤 | INPUT | Read line from stdin |
 | 🔟 | INPUT_NUM | Read number from stdin |
+
+### String
+
+| Emoji | Name | Stack Effect |
+|:-----:|------|:---:|
+| 🧵 | STRLEN | `( s -- n )` |
+| ✂️ | SUBSTR | `( s start len -- s' )` |
+| 🔍 | STRINDEX | `( s sub -- n )` |
+| 🔁 | STR2NUM | `( s -- n )` |
+| 🔤 | NUM2STR | `( n -- s )` |
 
 ### Memory
 
@@ -245,8 +256,11 @@ docs/
   REFERENCE.md       Language reference
   GPU_FEASIBILITY.md GPU execution technical report
 
+metal/
+  vm.metal       MSL compute kernel (GPU bytecode interpreter)
+
 examples/           Example .emoji programs
-tests/              448+ tests
+tests/              500+ tests
 scripts/            Agent runner, KB tools
 kb/                 Knowledge base (185 findings)
 ```

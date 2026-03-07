@@ -40,6 +40,7 @@ Structural — not instructions, not on the stack.
 | `✖️` | MUL | `( a b -- a*b )` | Also `✖` (no variation selector) |
 | `➗` | DIV | `( a b -- a//b\|a/b )` | Floor div for `i//i`, float otherwise. Error on zero. |
 | `🔢` | MOD | `( a b -- a%b )` | Integer remainder. Error on zero. |
+| `🎲` | RANDOM | `( -- float )` | Push random float in [0.0, 1.0). GPU: Philox-4x32-10 PRNG. |
 
 ### Comparison & Logic
 
