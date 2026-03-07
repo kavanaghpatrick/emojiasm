@@ -1,0 +1,26 @@
+{
+  "name": "emojiasm",
+  "displayName": "EmojiASM",
+  "description": "Syntax highlighting for EmojiASM (.emoji files)",
+  "version": "1.0.0",
+  "publisher": "emojiasm",
+  "engines": { "vscode": "^1.74.0" },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "emojiasm",
+        "aliases": ["EmojiASM", "emojiasm"],
+        "extensions": [".emoji"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "emojiasm",
+        "scopeName": "source.emojiasm",
+        "path": "./syntaxes/emojiasm.tmLanguage.json"
+      }
+    ]
+  }
+}
