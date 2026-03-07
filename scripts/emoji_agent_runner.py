@@ -34,14 +34,18 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 def _extract_number(output: str) -> float | None:
-    """Return the last numeric token on the last non-empty line, or None."""
+    """Last numeric token on the last non-empty output line."""
     for line in reversed(output.strip().splitlines()):
-        token = line.strip().split()[-1] if line.strip() else ""
-        if token:
+        line = line.strip()
+        if not line:
+            continue
+        tokens = line.split()
+        for token in reversed(tokens):
+            token = token.rstrip(".,;")
             try:
                 return float(token)
             except ValueError:
-                pass
+                continue
     return None
 
 
@@ -81,14 +85,16 @@ def _run_compiled(binary: str, instance_id: int, timeout: float) -> dict[str, An
 
 def _run_interpreted(source: str, instance_id: int, max_steps: int) -> dict[str, Any]:
     """Run one in-process VM instance. Returns per-instance result dict."""
-    # Import inside worker — safe under spawn because emojiasm is installed
+    import io
+    from contextlib import redirect_stdout
     from emojiasm.parser import parse, ParseError
     from emojiasm.vm import VM, VMError
     try:
         program = parse(source)
         vm = VM(program)
         vm.max_steps = max_steps
-        buf = vm.run()
+        with redirect_stdout(io.StringIO()):
+            buf = vm.run()
         output = "".join(buf)
         numeric = _extract_number(output)
         return {
@@ -154,7 +160,7 @@ def run_parallel(
     emoji_file: str | Path,
     n: int = 1000,
     workers: int | None = None,
-    timeout: float = 10.0,
+    timeout: float = 30.0,
     opt_level: str = "-O3",
     force_interpret: bool = False,
     max_steps: int = 1_000_000,
@@ -303,8 +309,8 @@ Examples:
                     help="Number of parallel instances (default: 1000)")
     ap.add_argument("--workers", type=int, default=None, metavar="N",
                     help="Worker processes (default: cpu_count)")
-    ap.add_argument("--timeout", type=float, default=10.0, metavar="SEC",
-                    help="Per-instance timeout in seconds (default: 10)")
+    ap.add_argument("--timeout", type=float, default=30.0, metavar="SEC",
+                    help="Per-instance timeout in seconds (default: 30)")
     ap.add_argument("--opt", default="-O3", metavar="LEVEL",
                     help="Clang optimisation flag (default: -O3)")
     ap.add_argument("--no-compile", action="store_true",

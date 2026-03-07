@@ -252,4 +252,24 @@ emojiasm --compile <file>          AOT compile + run (clang -O2)
 emojiasm --compile --opt=-O3 <file>  AOT compile with -O3
 emojiasm --emit-c <file>           Print generated C
 emojiasm --max-steps N <file>      Override step limit (default 1000000)
+emojiasm --repl                   Launch interactive REPL
+emojiasm --agent-mode <file>      JSON output with tracing
+emojiasm --agent-mode --runs 4 <file>  Parallel VM instances
+emojiasm --agent-mode --trace-steps 10 <file>  Trace every 10 steps
 ```
+
+---
+
+## Agent Integration
+
+`scripts/emoji_agent_runner.py` runs N parallel EmojiASM instances and returns structured JSON.
+Uses the AOT compiler when `clang` is available; falls back to Python VM automatically.
+
+```
+python3 scripts/emoji_agent_runner.py program.emoji            # 1000 runs
+python3 scripts/emoji_agent_runner.py program.emoji --n 500    # 500 runs
+python3 scripts/emoji_agent_runner.py program.emoji --no-compile --output out.json
+```
+
+JSON keys: `success`, `error`, `program`, `mode`, `instances`, `workers`,
+`total_time_ms`, `completed`, `failed`, `results` (float list), `stats`, `message`.
