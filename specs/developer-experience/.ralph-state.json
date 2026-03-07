@@ -1,7 +1,13 @@
 {
-  "spec": "developer-experience",
+  "source": "spec",
+  "name": "developer-experience",
+  "basePath": "specs/developer-experience",
   "phase": "execution",
   "taskIndex": 0,
   "totalTasks": 12,
-  "created": "2026-03-07"
+  "taskIteration": 1,
+  "maxTaskIterations": 5,
+  "globalIteration": 1,
+  "maxGlobalIterations": 100,
+  "commitSpec": false
 }
