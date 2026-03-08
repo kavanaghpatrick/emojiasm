@@ -48,7 +48,7 @@ Focus: Get each feature working end-to-end. Skip edge cases, accept minimal impl
   - _Requirements: FR-1, FR-2_
   - _Design: Component B_
 
-- [ ] 1.5 Add better error messages with suggestions
+- [x] 1.5 Add better error messages with suggestions
   - **Do**: In `transpiler.py`, update error messages: (a) In `visit_Assign`, detect `ast.List` on RHS and suggest `[0.0] * N`. (b) In `visit_For`, when iter is not `range()`, include "Only `for x in range(N)` is supported". (c) In `visit_Import`/`visit_ImportFrom`, when module not in allowed set, include suggestion "Use `import random` + `import math` instead". (d) In `visit_Call`, for unsupported functions, suggest closest supported function. (e) Add `_SUGGESTION_MAP` dict mapping unsupported patterns to suggestions.
   - **Files**: `emojiasm/transpiler.py`
   - **Done when**: `transpile("x = [1,2,3]")` raises TranspileError containing "Use `arr = [0.0] * N`"

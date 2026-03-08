@@ -93,6 +93,37 @@ _UNSUPPORTED_SYNTAX = {
     "Starred": "Star expressions not supported.",
 }
 
+# Maps common unsupported patterns to actionable suggestions
+_SUGGESTION_MAP: dict[str, str] = {
+    # Unsupported function calls -> closest supported alternative
+    "int": "Use `x // 1` for integer conversion",
+    "float": "Use `x * 1.0` for float conversion",
+    "round": "Use `int(x + 0.5)` or `x // 1` for rounding",
+    "str": "String conversion not supported; use print() for output",
+    "input": "Interactive input not supported; use variable assignment instead",
+    "type": "Type checking not supported at runtime",
+    "isinstance": "Type checking not supported at runtime",
+    "enumerate": "Use `for i in range(len(arr))` with `arr[i]` instead of enumerate()",
+    "zip": "Use index-based loops instead of zip()",
+    "map": "Use a for loop instead of map()",
+    "filter": "Use a for loop with if instead of filter()",
+    "sorted": "Sorting not supported; use manual comparison loops",
+    "reversed": "Use `for i in range(N-1, -1, -1)` instead of reversed()",
+    "list": "Use `arr = [0.0] * N` for fixed-size arrays",
+    "dict": "Dictionaries not supported; use arrays with index mapping",
+    "set": "Sets not supported; use arrays",
+    "tuple": "Tuples not supported; use separate variables",
+    "open": "File I/O not supported",
+    "pow": "Use `x ** y` or `math.exp(y * math.log(x))` instead of pow()",
+    "math.floor": "Use `x // 1` for floor",
+    "math.ceil": "Use `-((-x) // 1)` for ceil",
+    "math.pow": "Use `x ** y` operator instead of math.pow()",
+    "math.fabs": "Use `abs(x)` instead of math.fabs()",
+    "random.randint": "Use `int(random.uniform(a, b+1))` instead of randint()",
+    "random.choice": "Use `arr[int(random.random() * len(arr))]` instead of choice()",
+    "random.shuffle": "Shuffling not supported; use Fisher-Yates with random.random()",
+}
+
 
 class VarManager:
     """Maps Python variable names to emoji memory cells."""
@@ -498,6 +529,14 @@ class PythonTranspiler(ast.NodeVisitor):
                 self._emit(Op.ALLOC, cell, node=node)
             return
 
+        # Detect bare list literals (not [x] * N pattern)
+        if isinstance(node.value, ast.List):
+            raise TranspileError(
+                "List literals are not supported. "
+                "Use `arr = [0.0] * N` for fixed-size arrays.",
+                node.lineno,
+            )
+
         # Normal scalar assignment
         val_type = self._expr_type(node.value)
         self.visit(node.value)
@@ -647,7 +686,8 @@ class PythonTranspiler(ast.NodeVisitor):
             and node.iter.func.id == "range"
         ):
             raise TranspileError(
-                "Only 'for x in range(...)' loops are supported",
+                "Only `for x in range(N)` is supported. "
+                "Iterating over lists, strings, or other iterables is not available.",
                 node.lineno,
             )
 
@@ -738,7 +778,11 @@ class PythonTranspiler(ast.NodeVisitor):
         for alias in node.names:
             if alias.name not in allowed:
                 raise TranspileError(
-                    f"Unsupported import: '{alias.name}'. Only {allowed} are supported.",
+                    f"Unsupported import: '{alias.name}'. "
+                    f"Use `import random` + `import math` instead. "
+                    f"Supported: random.random(), random.uniform(), random.gauss(), "
+                    f"math.sqrt(), math.sin(), math.cos(), math.exp(), math.log(), "
+                    f"math.pi, abs(), min(), max().",
                     node.lineno,
                 )
             self._imports.add(alias.name)
@@ -747,7 +791,11 @@ class PythonTranspiler(ast.NodeVisitor):
         allowed = {"random", "math", "numpy"}
         if node.module not in allowed:
             raise TranspileError(
-                f"Unsupported import: '{node.module}'. Only {allowed} are supported.",
+                f"Unsupported import: '{node.module}'. "
+                f"Use `import random` + `import math` instead. "
+                f"Supported: random.random(), random.uniform(), random.gauss(), "
+                f"math.sqrt(), math.sin(), math.cos(), math.exp(), math.log(), "
+                f"math.pi, abs(), min(), max().",
                 node.lineno,
             )
         self._imports.add(node.module)
@@ -1238,11 +1286,28 @@ class PythonTranspiler(ast.NodeVisitor):
                 node.lineno,
             )
 
-        func_name = ast.dump(node.func)
-        raise TranspileError(
-            f"Unsupported function call: {func_name}",
-            node.lineno,
-        )
+        # Build a readable function name for the error message
+        func_name_readable = self._readable_func_name(node.func)
+        suggestion = _SUGGESTION_MAP.get(func_name_readable, "")
+        if not suggestion:
+            # Try just the base function name (e.g. "math.floor" -> look up "math.floor")
+            if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+                dotted = f"{node.func.value.id}.{node.func.attr}"
+                suggestion = _SUGGESTION_MAP.get(dotted, "")
+            # Try just the function name for builtins
+            if not suggestion and isinstance(node.func, ast.Name):
+                suggestion = _SUGGESTION_MAP.get(node.func.id, "")
+
+        msg = f"Unsupported function call: {func_name_readable}"
+        if suggestion:
+            msg += f". {suggestion}"
+        else:
+            msg += (
+                ". Supported functions: print(), abs(), min(), max(), len(), sum(), "
+                "random.random(), random.uniform(), random.gauss(), "
+                "math.sqrt(), math.sin(), math.cos(), math.exp(), math.log()"
+            )
+        raise TranspileError(msg, node.lineno)
 
     def visit_Attribute(self, node: ast.Attribute):
         # math.pi and math.e constants
@@ -1294,6 +1359,22 @@ class PythonTranspiler(ast.NodeVisitor):
         self._emit(Op.ALOAD, cell, node=node)
 
     # ── Helpers ──────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _readable_func_name(func_node: ast.expr) -> str:
+        """Build a human-readable name from a function call node."""
+        if isinstance(func_node, ast.Name):
+            return func_node.id
+        if isinstance(func_node, ast.Attribute):
+            parts = []
+            node = func_node
+            while isinstance(node, ast.Attribute):
+                parts.append(node.attr)
+                node = node.value
+            if isinstance(node, ast.Name):
+                parts.append(node.id)
+            return ".".join(reversed(parts))
+        return ast.dump(func_node)
 
     def _compile_print(self, node: ast.Call):
         """Compile a print() call."""
