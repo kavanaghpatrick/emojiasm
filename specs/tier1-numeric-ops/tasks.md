@@ -110,7 +110,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
   - _Requirements: NFR-2_
   - _Design: Component 5_
 
-- [ ] 2.4 Add C compiler emission for 9 new opcodes
+- [x] 2.4 Add C compiler emission for 9 new opcodes
   - **Do**: In `compiler.py`: (1) Add `#include <math.h>` to both `_PREAMBLE_NUMERIC` and `_PREAMBLE_MIXED` after the existing `#include <time.h>`. (2) Add 9 `elif op == Op.X:` blocks in `_emit_inst` after the `Op.RANDOM` block. Each block handles both numeric_only and mixed mode. Binary ops: `{ double b=POP(),a=POP(); PUSH_N(func(a,b)); }`. Unary ops: `{ double a=POP(); PUSH_N(func(a)); }`. C functions: `pow()`, `sqrt()`, `sin()`, `cos()`, `exp()`, `log()`, `fabs()` (not abs which is int-only in C), `fmin()`, `fmax()`.
   - **Files**: `emojiasm/compiler.py`
   - **Done when**: `compile_to_c(parse("📥 2 📥 10 🔋 🖨️ 🛑"))` generates valid C with `pow()` call
