@@ -110,7 +110,7 @@ After POC validated, clean up code.
   - **Commit**: `test(transpiler): add numpy shim tests`
   - _Requirements: AC-3.1 through AC-3.7_
 
-- [ ] 3.3 Unit tests for auto-parallelization
+- [x] 3.3 Unit tests for auto-parallelization
   - **Do**: Add tests to `tests/test_transpiler.py`. Test: single-instance detection positive (Monte Carlo pi), negative (has large loop), result capture, execution with n>1, stats in result.
   - **Files**: `tests/test_transpiler.py`
   - **Done when**: 5+ test cases covering detection and wrapping

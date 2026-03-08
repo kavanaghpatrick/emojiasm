@@ -750,3 +750,91 @@ class TestNumpyShim:
         src = "import numpy as np\nprint(np.e)"
         out = run_py(src).strip()
         assert out.startswith("2.71")
+
+
+# ── Auto-parallelization ───────────────────────────────────────────────
+
+
+class TestAutoParallelization:
+    def test_single_instance_detection_positive(self):
+        """Monte Carlo pi pattern IS detected as single-instance."""
+        import ast
+        from emojiasm.transpiler import _is_single_instance
+
+        src = (
+            "import random\n"
+            "x = random.random()\n"
+            "y = random.random()\n"
+            "result = x*x + y*y <= 1.0"
+        )
+        tree = ast.parse(src)
+        assert _is_single_instance(tree) is True
+
+    def test_single_instance_detection_negative(self):
+        """Program with large for-loop is NOT single-instance."""
+        import ast
+        from emojiasm.transpiler import _is_single_instance
+
+        src = (
+            "import random\n"
+            "s = 0\n"
+            "for i in range(1000):\n"
+            "    s += random.random()\n"
+            "result = s"
+        )
+        tree = ast.parse(src)
+        assert _is_single_instance(tree) is False
+
+    def test_result_capture(self):
+        """Program with result = expr has result value printed after capture."""
+        import ast
+        from emojiasm.transpiler import _is_single_instance, _ensure_result_capture
+
+        src = (
+            "import random\n"
+            "x = random.random()\n"
+            "result = x * 2"
+        )
+        tree = ast.parse(src)
+        assert _is_single_instance(tree) is True
+
+        tree = _ensure_result_capture(tree)
+        unparsed = ast.unparse(tree)
+        # Should have appended print(result)
+        assert "print(result)" in unparsed
+
+    def test_execute_python_parallel(self):
+        """execute_python(source, n=50) returns 50 results."""
+        from emojiasm.inference import EmojiASMTool
+
+        tool = EmojiASMTool(prefer_gpu=False)
+        src = (
+            "import random\n"
+            "x = random.random()\n"
+            "y = random.random()\n"
+            "result = x*x + y*y <= 1.0"
+        )
+        r = tool.execute_python(src, n=50)
+        assert r["completed"] == 50
+        assert len(r["results"]) == 50
+
+    def test_parallel_stats_in_result(self):
+        """Result from execute_python includes stats with mean, std, etc."""
+        from emojiasm.inference import EmojiASMTool
+
+        tool = EmojiASMTool(prefer_gpu=False)
+        src = (
+            "import random\n"
+            "x = random.random()\n"
+            "y = random.random()\n"
+            "result = x*x + y*y <= 1.0"
+        )
+        r = tool.execute_python(src, n=50)
+        stats = r["stats"]
+        assert "mean" in stats
+        assert "std" in stats
+        assert "min" in stats
+        assert "max" in stats
+        assert "count" in stats
+        # Mean of boolean (0 or 1) should be between 0 and 1
+        assert 0.0 <= stats["mean"] <= 1.0
