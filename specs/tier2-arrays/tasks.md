@@ -94,7 +94,7 @@ After POC validated, extend to all backends.
   - _Requirements: FR-17_
   - _Design: Component D_
 
-- [ ] 2.2 GPU interface: update opcode maps
+- [x] 2.2 GPU interface: update opcode maps
   - **Do**: In gpu.py: (1) Add to `GPU_OPCODES`: `"ALLOC": 0x42, "ALOAD": 0x43, "ASTORE": 0x44, "ALEN": 0x45`. (2) Run `validate_opcodes()` to verify consistency.
   - **Files**: `emojiasm/gpu.py`
   - **Done when**: `validate_opcodes()` passes with new array opcodes

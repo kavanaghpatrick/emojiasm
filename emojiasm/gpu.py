@@ -63,6 +63,11 @@ GPU_OPCODES: dict[str, int] = {
     # Memory
     "STORE":   0x40,
     "LOAD":    0x41,
+    # Arrays
+    "ALLOC":   0x42,
+    "ALOAD":   0x43,
+    "ASTORE":  0x44,
+    "ALEN":    0x45,
     # I/O
     "PRINT":   0x50,
     "PRINTLN": 0x51,
