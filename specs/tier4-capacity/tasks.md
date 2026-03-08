@@ -41,7 +41,7 @@ Focus: Change all constants and expand pools. Verify existing tests still pass.
   - _Requirements: FR-5_
   - _Design: Components B, C_
 
-- [ ] 1.4 Expand variable emoji pool from 50 to 200+
+- [x] 1.4 Expand variable emoji pool from 50 to 200+
   - **Do**: In `emojiasm/transpiler.py`, replace `EMOJI_POOL` with an expanded list of 200+ emoji. Use emoji from these Unicode blocks: food/drink, animals, nature, sports, vehicles, objects, symbols. Verify no collisions with `EMOJI_TO_OP` keys or directive constants by running the collision check script. Keep the existing 50 emoji as the first 50 entries (preserves backward compatibility for any serialized programs).
   - **Files**: `emojiasm/transpiler.py`
   - **Done when**: `len(EMOJI_POOL) >= 200` and no collision with opcodes/directives

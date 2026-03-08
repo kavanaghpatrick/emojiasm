@@ -31,13 +31,40 @@ class TranspileError(Exception):
         super().__init__(f"TranspileError{loc}: {message}")
 
 
-# Emoji pool for variable memory cells (50 characters)
+# Emoji pool for variable memory cells (200+ characters)
 EMOJI_POOL = list(
+    # Original 50 (backward compatible, do not reorder)
     "🔢📊🎯⭐🌟💎🔥🌊🌈🍎"
     "🍊🍋🍇🍓🍒🥝🥑🌽🥕🍄"
     "🐱🐶🐸🦊🐻🐼🐨🐯🦁🐮"
     "🐷🐵🐔🐧🦅🦆🦉🐝🐛🦋"
     "🌻🌺🌸🌼🌹🍀🌿🌴🌵🎄"
+    # Animals (additional)
+    "🐭🐹🐰🐴🐗🐺🦄🐌🐞🐜"
+    "🐢🐍🐙🐠🐟🐬🐳🐋🐊🐅"
+    "🐆🐘🐪🐫🐃🐂🐄🐎🐖🐏"
+    "🐑🐐🐕🐩🐇🐁🐀🐿🦔🦇"
+    "🦎🦖🦕🦑🦞🦀🐡🦈🦍🦧"
+    "🦛🦏🦒🦘🦙🦌🦃🦚🦜🦢"
+    "🦩🦝🦨🦡🦫🦦🦥🐈🐓🦗"
+    # Food and drink
+    "🍐🍌🍉🍈🍑🥭🍍🥥🍅🍆"
+    "🥦🥬🥒🧄🧅🥔🍠🥐🥯🍞"
+    "🥖🥨🧀🥚🍳🧈🥞🧇🥓🥩"
+    "🍗🍖🍔🍟🍕🥪🥙🧆🥗🥘"
+    "🥫🍝🍜🍲🍛🍣🍱🥟🍤🍙"
+    "🍚🍘🍥🥠🥮🍢🍡🍧🍨🍦"
+    "🥧🧁🍰🎂🍮🍭🍬🍫🍿🍩"
+    "🍪🌰🥜🍯"
+    # Sports and activities
+    "⚽🏀🏈⚾🥎🎾🏐🏉🥏🎱"
+    "🏓🏸🏒🏑🥍🏏🥅🏹🎣🥊"
+    "🥋🎽🛹🛷🥌🎿🏂"
+    # Vehicles and transport
+    "🚗🚕🚙🚌🏎🚓🚑🚒🚐🛻"
+    "🚚🚛🚜🏍🛵🚲🛴🚔🚍🚘"
+    "🚖🚡🚠🚟🚃🚋🚞🚝🚄🚅"
+    "🚈🚂🚆🛶🚤🛥🚢"
 )
 
 # Emoji pool for function names
