@@ -84,7 +84,7 @@ After POC validated, clean up code.
   - **Commit**: `refactor(transpiler): extract NumpyShim as proper AST transformer`
   - _Design: Component A_
 
-- [ ] 2.2 Add error handling for edge cases
+- [x] 2.2 Add error handling for edge cases
   - **Do**: Handle: empty source in auto-parallelize, numpy alias conflicts, source map for multi-line expressions, stats with NaN/inf values, histogram with single unique value. Add guards for all boundary conditions.
   - **Files**: `emojiasm/transpiler.py`, `emojiasm/stats.py`, `emojiasm/inference.py`
   - **Done when**: All edge cases handled gracefully without crashes

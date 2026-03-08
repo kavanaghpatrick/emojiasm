@@ -406,12 +406,28 @@ class NumpyShim(ast.NodeTransformer):
                 getattr(node, "lineno", 0),
             )
 
+        # Catch-all: any other np.<func>() not in FUNC_REWRITES
+        if (
+            isinstance(func, ast.Attribute)
+            and self._is_np(func.value)
+            and func.attr not in self.FUNC_REWRITES
+            and func.attr not in self.CONST_REWRITES
+        ):
+            raise TranspileError(
+                f"`np.{func.attr}()` is not supported. "
+                f"Only basic math functions (np.sqrt, np.sin, np.cos, np.exp, "
+                f"np.log, np.abs) and random functions (np.random.*) are "
+                f"available. Use `import math` + `import random` instead.",
+                getattr(node, "lineno", 0),
+            )
+
         return node
 
     def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
         """Rewrite numpy constant references to math equivalents.
 
         Handles ``np.pi`` -> ``math.pi``, ``np.e`` -> ``math.e``.
+        Unknown ``np.<attr>`` references raise a clear error.
         """
         self.generic_visit(node)
 
@@ -421,6 +437,25 @@ class NumpyShim(ast.NodeTransformer):
                 attr=self.CONST_REWRITES[node.attr],
                 ctx=node.ctx,
             )
+
+        # Catch-all for unknown np.<attr> (not a known constant, function, or submodule)
+        if (
+            self._is_np(node.value)
+            and node.attr not in self.CONST_REWRITES
+            and node.attr not in self.FUNC_REWRITES
+            and node.attr not in self._UNSUPPORTED_FUNCS
+            and node.attr != "random"  # np.random is a valid submodule prefix
+            and node.attr not in self._UNSUPPORTED_SUBMODULES
+        ):
+            raise TranspileError(
+                f"`np.{node.attr}` is not supported. "
+                f"Only basic math functions (np.sqrt, np.sin, np.cos, np.exp, "
+                f"np.log, np.abs), random functions (np.random.*), and "
+                f"constants (np.pi, np.e) are available. "
+                f"Use `import math` + `import random` instead.",
+                getattr(node, "lineno", 0),
+            )
+
         return node
 
     # ── Pass 3: import replacement ────────────────────────────────────

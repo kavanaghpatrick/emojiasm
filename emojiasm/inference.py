@@ -96,7 +96,7 @@ class EmojiASMTool:
             # Auto-parallelization: detect single-instance programs and
             # ensure result capture so each parallel run returns a value.
             effective_source = source
-            if n > 1:
+            if n > 1 and source and source.strip():
                 try:
                     tree = _ast.parse(source)
                     if _is_single_instance(tree):

@@ -12,13 +12,18 @@ def compute_stats(
 ) -> dict[str, Any]:
     """Compute descriptive statistics over a list of numeric values.
 
+    NaN and inf values are filtered out before computation.  If all
+    values are non-finite, returns the same zero-result as an empty list.
+
     Args:
-        values: List of numeric values.
+        values: List of numeric values (may contain NaN/inf).
         histogram_bins: Number of histogram bins. Set to 0 to skip histogram.
 
     Returns:
         Dict with keys: mean, std, min, max, count, median, and optionally histogram.
     """
+    # Filter out NaN and inf values — they poison arithmetic and comparisons
+    values = [v for v in values if isinstance(v, (int, float)) and math.isfinite(v)]
     count = len(values)
 
     if count == 0:
