@@ -101,7 +101,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
   - _Requirements: FR-1 through FR-9_
   - _Design: Component 4_
 
-- [ ] 2.3 Add GPU glue entries for 9 new opcodes
+- [x] 2.3 Add GPU glue entries for 9 new opcodes
   - **Do**: In `gpu.py`: Add 9 entries to `GPU_OPCODES` dict matching bytecode OP_MAP values exactly. No `_GPU_NAME_TO_OP_NAME` changes needed since GPU names match Op enum names directly.
   - **Files**: `emojiasm/gpu.py`
   - **Done when**: `validate_opcodes()` passes with new opcodes
