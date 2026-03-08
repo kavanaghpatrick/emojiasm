@@ -147,7 +147,7 @@ After POC validated, extend to all backends.
   - **Commit**: `test(transpiler): add tests for arrays, constant folding, type inference`
   - _Requirements: AC-2.1 through AC-5.4_
 
-- [ ] 3.3 Bytecode and compiler tests
+- [x] 3.3 Bytecode and compiler tests
   - **Do**: Add tests for: bytecode encoding of array opcodes (verify packed uint32 values), C compiler output contains array declarations and access code, compiled C program produces correct output when run. If test infrastructure for C compilation exists, add to it.
   - **Files**: `tests/test_bytecode.py` or `tests/test_emojiasm.py`
   - **Done when**: Bytecode encoding and C compilation of array programs verified

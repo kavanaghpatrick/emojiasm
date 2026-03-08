@@ -365,3 +365,70 @@ def test_input_num_emits_scanf():
     src = "📜 🏠\n  🔟\n  📤\n  🛑"
     c = compile_to_c(_parse(src))
     assert "scanf" in c
+
+
+# ---------------------------------------------------------------------------
+# Array C compilation tests
+# ---------------------------------------------------------------------------
+
+_ARRAY_PROGRAM = (
+    "📜 🏠\n"
+    "  📥 5\n"
+    "  🗃️ 🅰️\n"       # ALLOC arr, size=5
+    "  📥 0\n"
+    "  📥 42\n"
+    "  ✏️ 🅰️\n"       # ASTORE arr[0] = 42
+    "  📥 0\n"
+    "  📖 🅰️\n"       # ALOAD arr[0]
+    "  🖨️\n"
+    "  🧮 🅰️\n"       # ALEN arr
+    "  🖨️\n"
+    "  🛑"
+)
+
+
+def test_compile_to_c_array_contains_arr_declaration():
+    """C output for an array program must contain _arr array declarations."""
+    c_src = compile_to_c(_parse(_ARRAY_PROGRAM))
+    assert "_arr" in c_src
+
+
+def test_compile_to_c_array_contains_memset():
+    """ALLOC must emit memset to zero-fill the array."""
+    c_src = compile_to_c(_parse(_ARRAY_PROGRAM))
+    assert "memset" in c_src
+
+
+def test_compile_to_c_array_includes_string_h():
+    """Array programs need string.h for memset."""
+    c_src = compile_to_c(_parse(_ARRAY_PROGRAM))
+    assert "string.h" in c_src
+
+
+def test_compile_to_c_array_size_variable():
+    """C output must contain array size tracking variable (_arr*_sz)."""
+    c_src = compile_to_c(_parse(_ARRAY_PROGRAM))
+    assert "_sz" in c_src
+
+
+def test_compile_to_c_array_static_double():
+    """Numeric-only array program uses static double for array storage."""
+    c_src = compile_to_c(_parse(_ARRAY_PROGRAM))
+    # Should have static double array declaration
+    assert "static double _arr" in c_src
+
+
+@requires_clang
+def test_compile_program_array_produces_correct_output():
+    """Compiled array program runs and prints correct values."""
+    program = _parse(_ARRAY_PROGRAM)
+    bin_path = compile_program(program)
+    try:
+        result = subprocess.run([bin_path], capture_output=True, text=True, timeout=10)
+        assert result.returncode == 0
+        lines = result.stdout.strip().splitlines()
+        assert "42" in lines[0]
+        assert "5" in lines[1]
+    finally:
+        if os.path.exists(bin_path):
+            os.unlink(bin_path)

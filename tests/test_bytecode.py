@@ -874,3 +874,181 @@ class TestMathOpcodeGpuTier:
         gpu = compile_to_bytecode(prog)
         assert gpu.gpu_tier == gpu_tier(prog)
         assert gpu.gpu_tier == 1
+
+
+# ── Array opcode bytecode tests ──────────────────────────────────────────
+
+_ARRAY_OPS = [Op.ALLOC, Op.ALOAD, Op.ASTORE, Op.ALEN]
+
+
+class TestArrayOpcodesInOpMap:
+    """Verify OP_MAP contains all 4 array opcodes."""
+
+    def test_all_array_ops_present(self):
+        for op in _ARRAY_OPS:
+            assert op in OP_MAP, f"Op.{op.name} missing from OP_MAP"
+
+    def test_array_opcode_values(self):
+        """Array opcodes should be 0x42 through 0x45."""
+        expected = {
+            Op.ALLOC: 0x42, Op.ALOAD: 0x43, Op.ASTORE: 0x44, Op.ALEN: 0x45,
+        }
+        for op, code in expected.items():
+            assert OP_MAP[op] == code, (
+                f"Op.{op.name}: expected 0x{code:02X}, got 0x{OP_MAP[op]:02X}"
+            )
+
+    def test_array_ops_in_reverse_map(self):
+        """All 4 array ops should appear in OPCODE_TO_OP."""
+        for op in _ARRAY_OPS:
+            code = OP_MAP[op]
+            assert code in OPCODE_TO_OP
+            assert OPCODE_TO_OP[code] == op
+
+
+class TestArrayOpcodeStackEffects:
+    """Verify _STACK_EFFECTS are defined for all 4 array opcodes."""
+
+    def test_all_array_ops_have_stack_effects(self):
+        for op in _ARRAY_OPS:
+            assert op in _STACK_EFFECTS, f"Op.{op.name} missing from _STACK_EFFECTS"
+
+    def test_alloc_effect(self):
+        """ALLOC pops size => net -1."""
+        assert _STACK_EFFECTS[Op.ALLOC] == -1
+
+    def test_aload_effect(self):
+        """ALOAD pops index, pushes value => net 0."""
+        assert _STACK_EFFECTS[Op.ALOAD] == 0
+
+    def test_astore_effect(self):
+        """ASTORE pops index and value => net -2."""
+        assert _STACK_EFFECTS[Op.ASTORE] == -2
+
+    def test_alen_effect(self):
+        """ALEN pushes length => net +1."""
+        assert _STACK_EFFECTS[Op.ALEN] == +1
+
+
+class TestArrayBytecodeEncoding:
+    """Verify bytecode encoding of programs with array operations."""
+
+    def test_array_program_compiles(self):
+        """A program using all 4 array ops compiles to bytecode without errors."""
+        src = (
+            "📜 🏠\n"
+            "📥 5\n"
+            "🗃️ 🅰️\n"      # ALLOC arr, size=5
+            "📥 0\n"
+            "📥 42\n"
+            "✏️ 🅰️\n"      # ASTORE arr[0] = 42
+            "📥 0\n"
+            "📖 🅰️\n"      # ALOAD arr[0]
+            "🖨️\n"
+            "🧮 🅰️\n"      # ALEN arr
+            "🖨️\n"
+            "🛑\n"
+        )
+        prog = _parse(src)
+        gpu = compile_to_bytecode(prog)
+
+        assert isinstance(gpu, GpuProgram)
+        assert len(gpu.bytecode) > 0
+
+    def test_array_opcodes_encoded_correctly(self):
+        """ALLOC/ALOAD/ASTORE/ALEN are encoded with correct opcode bytes."""
+        src = (
+            "📜 🏠\n"
+            "📥 5\n"
+            "🗃️ 🅰️\n"      # ALLOC
+            "📥 0\n"
+            "📥 42\n"
+            "✏️ 🅰️\n"      # ASTORE
+            "📥 0\n"
+            "📖 🅰️\n"      # ALOAD
+            "🧮 🅰️\n"      # ALEN
+            "🛑\n"
+        )
+        prog = _parse(src)
+        gpu = compile_to_bytecode(prog)
+
+        decoded = _decode_bytecode(gpu.bytecode)
+        opcodes = [op for op, _ in decoded]
+
+        assert OP_MAP[Op.ALLOC] in opcodes
+        assert OP_MAP[Op.ALOAD] in opcodes
+        assert OP_MAP[Op.ASTORE] in opcodes
+        assert OP_MAP[Op.ALEN] in opcodes
+
+    def test_array_operands_are_cell_indices(self):
+        """Array ops use memory cell indices as operands."""
+        src = (
+            "📜 🏠\n"
+            "📥 3\n"
+            "🗃️ 🅰️\n"
+            "🧮 🅰️\n"
+            "📤\n"
+            "🛑\n"
+        )
+        prog = _parse(src)
+        gpu = compile_to_bytecode(prog)
+        mem_map = _build_memory_map(prog)
+
+        decoded = _decode_bytecode(gpu.bytecode)
+        # ALLOC instruction (index 1) should have cell index for 🅰️
+        alloc_inst = decoded[1]
+        assert alloc_inst[0] == OP_MAP[Op.ALLOC]
+        assert alloc_inst[1] == mem_map["🅰️"]
+
+        # ALEN instruction (index 2) should have same cell index
+        alen_inst = decoded[2]
+        assert alen_inst[0] == OP_MAP[Op.ALEN]
+        assert alen_inst[1] == mem_map["🅰️"]
+
+    def test_array_roundtrip_decode(self):
+        """Array opcodes round-trip through encode/decode correctly."""
+        src = (
+            "📜 🏠\n"
+            "📥 3\n"
+            "🗃️ 🅰️\n"
+            "📥 0\n"
+            "📥 99\n"
+            "✏️ 🅰️\n"
+            "📥 0\n"
+            "📖 🅰️\n"
+            "🧮 🅰️\n"
+            "🛑\n"
+        )
+        prog = _parse(src)
+        gpu = compile_to_bytecode(prog)
+
+        decoded = _decode_bytecode(gpu.bytecode)
+        expected_ops = [
+            Op.PUSH, Op.ALLOC, Op.PUSH, Op.PUSH, Op.ASTORE,
+            Op.PUSH, Op.ALOAD, Op.ALEN, Op.HALT,
+        ]
+        assert len(decoded) == len(expected_ops)
+        for (opcode, _), expected_op in zip(decoded, expected_ops):
+            assert OPCODE_TO_OP[opcode] == expected_op
+
+    def test_multiple_arrays_different_cells(self):
+        """Multiple arrays get different cell indices."""
+        src = (
+            "📜 🏠\n"
+            "📥 3\n🗃️ 🅰️\n"
+            "📥 5\n🗃️ 🅱️\n"
+            "🛑\n"
+        )
+        prog = _parse(src)
+        gpu = compile_to_bytecode(prog)
+        mem_map = _build_memory_map(prog)
+
+        assert mem_map["🅰️"] != mem_map["🅱️"]
+
+        decoded = _decode_bytecode(gpu.bytecode)
+        # First ALLOC (index 1)
+        assert decoded[1][0] == OP_MAP[Op.ALLOC]
+        assert decoded[1][1] == mem_map["🅰️"]
+        # Second ALLOC (index 3)
+        assert decoded[3][0] == OP_MAP[Op.ALLOC]
+        assert decoded[3][1] == mem_map["🅱️"]
