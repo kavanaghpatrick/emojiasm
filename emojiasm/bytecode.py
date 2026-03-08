@@ -69,6 +69,11 @@ OP_MAP: dict[Op, int] = {
     # Memory
     Op.STORE:   0x40,
     Op.LOAD:    0x41,
+    # Arrays
+    Op.ALLOC:   0x42,
+    Op.ALOAD:   0x43,
+    Op.ASTORE:  0x44,
+    Op.ALEN:    0x45,
     # I/O (GPU-supported subset)
     Op.PRINT:   0x50,
     Op.PRINTLN: 0x51,
@@ -217,7 +222,7 @@ def _build_memory_map(program: Program) -> dict[str, int]:
     cells: set[str] = set()
     for func in program.functions.values():
         for inst in func.instructions:
-            if inst.op in (Op.STORE, Op.LOAD):
+            if inst.op in (Op.STORE, Op.LOAD, Op.ALLOC, Op.ALOAD, Op.ASTORE, Op.ALEN):
                 cells.add(inst.arg)
     return {name: idx for idx, name in enumerate(sorted(cells))}
 
@@ -280,6 +285,10 @@ _STACK_EFFECTS: dict[Op, int] = {
     Op.NOP:      0,
     Op.STORE:   -1,    # pops value
     Op.LOAD:    +1,    # pushes value
+    Op.ALLOC:   -1,    # pops size, no push
+    Op.ALOAD:    0,    # pops index, pushes value
+    Op.ASTORE:  -2,    # pops index and value
+    Op.ALEN:    +1,    # pushes length
     Op.PRINT:   -1,    # pops value
     Op.PRINTLN: -1,    # pops value
     Op.RANDOM:  +1,    # pushes random float
@@ -409,7 +418,7 @@ def compile_to_bytecode(program: Program) -> GpuProgram:
             target = func_offsets[inst.arg]
             bytecode.append(_pack(opcode, target))
 
-        elif op in (Op.STORE, Op.LOAD):
+        elif op in (Op.STORE, Op.LOAD, Op.ALLOC, Op.ALOAD, Op.ASTORE, Op.ALEN):
             if inst.arg not in mem_map:
                 raise BytecodeError(
                     f"Unresolved memory cell '{inst.arg}'"

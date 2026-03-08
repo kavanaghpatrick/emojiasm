@@ -85,7 +85,7 @@ Focus: Get arrays working end-to-end in VM + transpiler. Skip GPU/compiler, acce
 
 After POC validated, extend to all backends.
 
-- [ ] 2.1 Bytecode encoder: add array opcode support
+- [x] 2.1 Bytecode encoder: add array opcode support
   - **Do**: In bytecode.py: (1) Add to `OP_MAP`: `Op.ALLOC: 0x42, Op.ALOAD: 0x43, Op.ASTORE: 0x44, Op.ALEN: 0x45`. (2) Add to `_STACK_EFFECTS`: ALLOC=-1, ALOAD=0, ASTORE=-2, ALEN=+1. (3) Encoding uses same `_build_memory_map` for cell ID in operand. (4) ALLOC/ALOAD/ASTORE/ALEN handled in `compile_to_bytecode` same as STORE/LOAD (mem_map lookup).
   - **Files**: `emojiasm/bytecode.py`
   - **Done when**: Programs with arrays compile to bytecode without errors
