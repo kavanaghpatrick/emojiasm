@@ -331,16 +331,16 @@ class VM:
                 case Op.ALLOC:
                     size = self._pop()
                     isize = int(size)
-                    if isize <= 0:
-                        raise VMError(f"ALLOC size must be positive, got {size}", ip, source=inst.source, func_name=func_name)
+                    if isize < 0:
+                        raise VMError(f"ALLOC size must be non-negative, got {size}", ip, source=inst.source, func_name=func_name)
                     self.memory[arg] = [0.0] * isize
 
                 case Op.ALOAD:
                     if arg not in self.memory:
-                        raise VMError(f"Array '{arg}' not initialized 📂❌", ip, source=inst.source, func_name=func_name)
+                        raise VMError(f"Cell '{arg}' not initialized 📂❌", ip, source=inst.source, func_name=func_name)
                     arr = self.memory[arg]
                     if not isinstance(arr, list):
-                        raise VMError(f"Memory cell '{arg}' is not an array (is scalar)", ip, source=inst.source, func_name=func_name)
+                        raise VMError(f"Cell '{arg}' is not an array", ip, source=inst.source, func_name=func_name)
                     idx = int(self._pop())
                     if idx < 0 or idx >= len(arr):
                         raise VMError(f"Array index {idx} out of bounds for '{arg}' (size {len(arr)})", ip, source=inst.source, func_name=func_name)
@@ -348,10 +348,10 @@ class VM:
 
                 case Op.ASTORE:
                     if arg not in self.memory:
-                        raise VMError(f"Array '{arg}' not initialized 📂❌", ip, source=inst.source, func_name=func_name)
+                        raise VMError(f"Cell '{arg}' not initialized 📂❌", ip, source=inst.source, func_name=func_name)
                     arr = self.memory[arg]
                     if not isinstance(arr, list):
-                        raise VMError(f"Memory cell '{arg}' is not an array (is scalar)", ip, source=inst.source, func_name=func_name)
+                        raise VMError(f"Cell '{arg}' is not an array", ip, source=inst.source, func_name=func_name)
                     val = self._pop()
                     idx = int(self._pop())
                     if idx < 0 or idx >= len(arr):
@@ -360,10 +360,10 @@ class VM:
 
                 case Op.ALEN:
                     if arg not in self.memory:
-                        raise VMError(f"Array '{arg}' not initialized 📂❌", ip, source=inst.source, func_name=func_name)
+                        raise VMError(f"Cell '{arg}' not initialized 📂❌", ip, source=inst.source, func_name=func_name)
                     arr = self.memory[arg]
                     if not isinstance(arr, list):
-                        raise VMError(f"Memory cell '{arg}' is not an array (is scalar)", ip, source=inst.source, func_name=func_name)
+                        raise VMError(f"Cell '{arg}' is not an array", ip, source=inst.source, func_name=func_name)
                     self._push(len(arr))
 
                 case _:

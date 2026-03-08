@@ -121,7 +121,7 @@ After POC validated, extend to all backends.
   - _Requirements: FR-19_
   - _Design: Component G_
 
-- [ ] 2.5 Add error handling for edge cases
+- [x] 2.5 Add error handling for edge cases
   - **Do**: Ensure all backends handle: (1) ALLOC with size 0 or negative (VM: error, GPU: status error). (2) ALOAD/ASTORE on uninitialized cell (VM: VMError). (3) ALOAD/ASTORE on scalar cell (VM: VMError). (4) Index out of bounds with clear error message showing index and array size. (5) GPU: array cell ID >= MAX_ARRAYS -> status error. (6) GPU: size > MAX_ARRAY_SIZE -> status error.
   - **Files**: `emojiasm/vm.py`, `emojiasm/metal/vm.metal`
   - **Done when**: All error cases produce clear messages or status codes
