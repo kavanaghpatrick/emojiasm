@@ -41,6 +41,15 @@ class Op(IntEnum):
     STR2NUM = auto()
     NUM2STR = auto()
     RANDOM = auto()
+    POW = auto()
+    SQRT = auto()
+    SIN = auto()
+    COS = auto()
+    EXP = auto()
+    LOG = auto()
+    ABS = auto()
+    MIN = auto()
+    MAX = auto()
 
 
 # Emoji -> Opcode mapping
@@ -85,6 +94,17 @@ EMOJI_TO_OP = {
     "🔁": Op.STR2NUM,
     "🔤": Op.NUM2STR,
     "🎲": Op.RANDOM,
+    "🔋": Op.POW,
+    "🌱": Op.SQRT,
+    "📈": Op.SIN,
+    "📉": Op.COS,
+    "🚀": Op.EXP,
+    "📓": Op.LOG,
+    "💪": Op.ABS,
+    "⬇️": Op.MIN,
+    "⬇": Op.MIN,
+    "⬆️": Op.MAX,
+    "⬆": Op.MAX,
 }
 
 # Reverse mapping for disassembly

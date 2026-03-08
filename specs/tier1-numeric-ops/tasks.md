@@ -12,7 +12,7 @@ generated: auto
 
 Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. Skip bytecode/Metal/compiler until POC validated.
 
-- [ ] 1.1 Add 9 new Op enum values and emoji mappings to opcodes.py
+- [x] 1.1 Add 9 new Op enum values and emoji mappings to opcodes.py
   - **Do**: Add `POW = auto()`, `SQRT = auto()`, `SIN = auto()`, `COS = auto()`, `EXP = auto()`, `LOG = auto()`, `ABS = auto()`, `MIN = auto()`, `MAX = auto()` after `RANDOM = auto()` in Op IntEnum. Add emoji mappings to EMOJI_TO_OP: `"🔋": Op.POW`, `"🌱": Op.SQRT`, `"📈": Op.SIN`, `"📉": Op.COS`, `"🚀": Op.EXP`, `"📓": Op.LOG`, `"💪": Op.ABS`, `"⬇️": Op.MIN`, `"⬇": Op.MIN`, `"⬆️": Op.MAX`, `"⬆": Op.MAX`. Ensure multi-codepoint emoji (with variation selectors ⬇️/⬆️) are listed BEFORE their bare versions (⬇/⬆) in the dict for correct prefix matching.
   - **Files**: `emojiasm/opcodes.py`
   - **Done when**: `from emojiasm.opcodes import Op; print(Op.POW, Op.SQRT, Op.MAX)` works, and `EMOJI_TO_OP["🔋"] == Op.POW`
