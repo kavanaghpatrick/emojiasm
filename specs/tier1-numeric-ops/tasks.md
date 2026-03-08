@@ -130,7 +130,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
 
 ## Phase 3: Documentation and Polish
 
-- [ ] 3.1 Update docs/REFERENCE.md with new opcodes
+- [x] 3.1 Update docs/REFERENCE.md with new opcodes
   - **Do**: Add a new "Math" section to the Instruction Set in REFERENCE.md between Arithmetic and Comparison. Include all 9 opcodes with emoji, name, stack effect, and notes. Update the "Python Transpiler" section to list new supported features: `**`, `math.sqrt/sin/cos/exp/log`, `abs()`, `min()`, `max()`, `math.pi`, `math.e`, `random.uniform()`, `random.gauss()`, chained comparisons. Update the "Not supported" line to remove `**`.
   - **Files**: `docs/REFERENCE.md`
   - **Done when**: Reference doc accurately describes all new features

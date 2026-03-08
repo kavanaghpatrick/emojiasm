@@ -42,6 +42,20 @@ Structural — not instructions, not on the stack.
 | `🔢` | MOD | `( a b -- a%b )` | Integer remainder. Error on zero. |
 | `🎲` | RANDOM | `( -- float )` | Push random float in [0.0, 1.0). GPU: Philox-4x32-10 PRNG. |
 
+### Math
+
+| Emoji | Name | Stack effect | Notes |
+|:---:|---|:---:|---|
+| `🔋` | POW | `( a b -- a^b )` | Power / exponentiation |
+| `🌱` | SQRT | `( a -- √a )` | Square root. Error on negative input. |
+| `📈` | SIN | `( a -- sin(a) )` | Sine (radians) |
+| `📉` | COS | `( a -- cos(a) )` | Cosine (radians) |
+| `🚀` | EXP | `( a -- e^a )` | Natural exponential |
+| `📓` | LOG | `( a -- ln(a) )` | Natural logarithm. Error on non-positive input. |
+| `💪` | ABS | `( a -- |a| )` | Absolute value. Preserves int type. |
+| `⬇️` | MIN | `( a b -- min(a,b) )` | Minimum of two values. Also `⬇`. |
+| `⬆️` | MAX | `( a b -- max(a,b) )` | Maximum of two values. Also `⬆`. |
+
 ### Comparison & Logic
 
 All comparison ops consume both operands and push `1` (true) or `0` (false).
@@ -308,15 +322,18 @@ result = tool.execute_python("print(42)", n=1000)
 
 **Supported Python subset:**
 - Literals: `int`, `float`, `True`, `False`
-- Arithmetic: `+`, `-`, `*`, `/`, `//`, `%`
-- Comparisons: `==`, `!=`, `<`, `>`, `<=`, `>=`
+- Arithmetic: `+`, `-`, `*`, `/`, `//`, `%`, `**`
+- Comparisons: `==`, `!=`, `<`, `>`, `<=`, `>=`, chained (`a < b < c`)
 - Boolean: `and`, `or`, `not`
 - Control flow: `if`/`elif`/`else`, `while`, `for x in range()`, `break`, `continue`
 - Functions: `def`/`return` (including recursion)
 - I/O: `print()` (single/multi-arg, `end=""`)
-- Random: `import random` + `random.random()`
+- Math: `math.sqrt()`, `math.sin()`, `math.cos()`, `math.exp()`, `math.log()`
+- Constants: `math.pi`, `math.e`
+- Builtins: `abs()`, `min()`, `max()`
+- Random: `import random` + `random.random()`, `random.uniform(a, b)`, `random.gauss(mu, sigma)`
 
-**Not supported:** strings, lists, dicts, classes, exceptions, generators, f-strings, `**`, `import` beyond random/math.
+**Not supported:** strings, lists, dicts, classes, exceptions, generators, f-strings, `import` beyond random/math.
 
 ---
 
