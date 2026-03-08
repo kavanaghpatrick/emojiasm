@@ -112,7 +112,7 @@ After POC validated, extend to all backends.
   - _Requirements: FR-18_
   - _Design: Component E_
 
-- [ ] 2.4 C compiler: add array opcode emission
+- [x] 2.4 C compiler: add array opcode emission
   - **Do**: In compiler.py: (1) Scan for ALLOC/ALOAD/ASTORE/ALEN ops to collect array cells (separate from scalar mem map). (2) Emit C array declarations: `static double _arr0[256]; static int _arr0_sz = 0;` for numeric, `static Val _arr0[256]; static int _arr0_sz = 0;` for mixed. (3) Add _emit_inst cases for each: ALLOC -> set size + memset, ALOAD -> index + push, ASTORE -> pop value + index + store, ALEN -> push size. (4) Include `<string.h>` for memset if not already included.
   - **Files**: `emojiasm/compiler.py`
   - **Done when**: Programs with arrays compile to C and produce correct output
