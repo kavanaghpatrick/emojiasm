@@ -824,6 +824,66 @@ class PythonTranspiler(ast.NodeVisitor):
             self._emit(Op.MAX, node=node)
             return
 
+        # len(arr) builtin for arrays
+        if isinstance(node.func, ast.Name) and node.func.id == "len":
+            if len(node.args) != 1:
+                raise TranspileError(
+                    "len() takes exactly 1 argument",
+                    node.lineno,
+                )
+            arg = node.args[0]
+            if isinstance(arg, ast.Name) and self._vars.is_array(arg.id):
+                cell = self._vars.lookup(arg.id)
+                self._emit(Op.ALEN, cell, node=node)
+                return
+            raise TranspileError(
+                "len() only supported on array variables",
+                node.lineno,
+            )
+
+        # sum(arr) builtin for arrays — inline accumulation loop
+        if isinstance(node.func, ast.Name) and node.func.id == "sum":
+            if len(node.args) != 1:
+                raise TranspileError(
+                    "sum() takes exactly 1 argument",
+                    node.lineno,
+                )
+            arg = node.args[0]
+            if isinstance(arg, ast.Name) and self._vars.is_array(arg.id):
+                cell = self._vars.lookup(arg.id)
+                loop_label = self._labels.next("sum_loop")
+                end_label = self._labels.next("sum_end")
+                temp_i_cell = self._vars.assign("__sum_i__")
+
+                # Push initial accumulator value
+                self._emit(Op.PUSH, 0.0, node=node)
+                # Initialize loop counter to 0
+                self._emit(Op.PUSH, 0, node=node)
+                self._emit(Op.STORE, temp_i_cell, node=node)
+                # Loop: while i < len(arr)
+                self._set_label(loop_label)
+                self._emit(Op.LOAD, temp_i_cell, node=node)
+                self._emit(Op.ALEN, cell, node=node)
+                self._emit(Op.CMP_LT, node=node)
+                self._emit(Op.JZ, end_label, node=node)
+                # Load arr[i] and add to accumulator
+                self._emit(Op.LOAD, temp_i_cell, node=node)
+                self._emit(Op.ALOAD, cell, node=node)
+                self._emit(Op.ADD, node=node)
+                # i += 1
+                self._emit(Op.LOAD, temp_i_cell, node=node)
+                self._emit(Op.PUSH, 1, node=node)
+                self._emit(Op.ADD, node=node)
+                self._emit(Op.STORE, temp_i_cell, node=node)
+                self._emit(Op.JMP, loop_label, node=node)
+                self._set_label(end_label)
+                # Accumulator (sum) is now on top of stack
+                return
+            raise TranspileError(
+                "sum() only supported on array variables",
+                node.lineno,
+            )
+
         # User-defined function call
         if isinstance(node.func, ast.Name) and node.func.id in self._func_map:
             emoji = self._func_map[node.func.id]

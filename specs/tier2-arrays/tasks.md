@@ -48,7 +48,7 @@ Focus: Get arrays working end-to-end in VM + transpiler. Skip GPU/compiler, acce
   - _Requirements: FR-8, FR-9, FR-10_
   - _Design: Component H_
 
-- [ ] 1.5 Transpiler: sum() and len() builtins
+- [x] 1.5 Transpiler: sum() and len() builtins
   - **Do**: In transpiler.py `visit_Call`: (1) Handle `len(var)` when var is known array -> emit ALEN cell. (2) Handle `sum(var)` when var is known array -> emit inline accumulation loop: PUSH 0.0, allocate temp_i cell, PUSH 0, STORE temp_i, loop: LOAD temp_i, ALEN cell, CMP_LT, JZ end, LOAD temp_i, ALOAD cell, ADD, LOAD temp_i, PUSH 1, ADD, STORE temp_i, JMP loop, end label.
   - **Files**: `emojiasm/transpiler.py`
   - **Done when**: `sum()` and `len()` work on array variables
