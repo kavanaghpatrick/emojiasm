@@ -34,8 +34,19 @@ Run 10,000 parallel EmojiASM instances on GPU in the time it takes to run 10 on 
 from emojiasm import EmojiASMTool
 
 tool = EmojiASMTool()
-result = tool.execute(llm_generated_source, n=10_000)  # auto GPU/CPU routing
-print(result["stats"]["mean"])                          # 3.1415...
+
+# Write Python — runs on GPU as EmojiASM
+result = tool.execute_python("""
+import random
+hits = 0
+for i in range(10000):
+    x = random.random()
+    y = random.random()
+    if x*x + y*y <= 1.0:
+        hits += 1
+print(4.0 * hits / 10000)
+""", n=10_000)
+print(result["stats"]["mean"])  # 3.1415...
 ```
 
 ---
@@ -54,6 +65,10 @@ emojiasm --compile examples/fibonacci.emoji
 
 # GPU execution (Apple Silicon + MLX)
 emojiasm --gpu --gpu-instances 10000 examples/monte_carlo_pi.emoji
+
+# Python transpiler — write Python, run as EmojiASM
+emojiasm --from-python examples_py/monte_carlo_pi.py
+emojiasm --transpile examples_py/fibonacci.py   # emit EmojiASM source
 ```
 
 ---
@@ -167,7 +182,33 @@ emojiasm --compile --opt=-O3 examples/fibonacci.emoji
 emojiasm --emit-c examples/fibonacci.emoji   # inspect generated C
 ```
 
-### 3. GPU Execution (Metal via MLX)
+### 3. Python Transpiler
+
+Write Python, run as EmojiASM. Compiles a numeric subset of Python (arithmetic, variables, loops, conditionals, functions, `random.random()`) to EmojiASM via the `ast` module.
+
+```bash
+# Transpile and run
+emojiasm --from-python examples_py/monte_carlo_pi.py
+
+# See the generated EmojiASM
+emojiasm --transpile examples_py/fibonacci.py
+
+# Compose with other flags
+emojiasm --from-python script.py --gpu --gpu-instances 10000
+emojiasm --from-python script.py --compile --opt=-O3
+```
+
+```python
+from emojiasm import EmojiASMTool
+
+tool = EmojiASMTool()
+result = tool.execute_python("print(6 * 7)", n=1)
+# → {"success": true, "mode": "cpu", ...}
+```
+
+**Supported Python subset:** `int`, `float`, `+`, `-`, `*`, `/`, `//`, `%`, comparisons, `and`/`or`/`not`, `if`/`elif`/`else`, `while`, `for x in range()`, `break`/`continue`, `def`/`return` (including recursion), `print()`, `random.random()`.
+
+### 4. GPU Execution (Metal via MLX)
 
 Runs EmojiASM programs as Metal compute kernels on Apple Silicon. Each GPU thread is an independent VM instance. Designed for parallel agent workloads.
 
@@ -223,13 +264,16 @@ from emojiasm import EmojiASMTool
 
 tool = EmojiASMTool(max_instances=10_000)
 
-# Execute a program (auto-routes to GPU when beneficial)
-result = tool.execute(source, n=1000)
+# Execute EmojiASM source (auto-routes to GPU when beneficial)
+result = tool.execute(emoji_source, n=1000)
+
+# Execute Python source (transpile + run)
+result = tool.execute_python(python_source, n=1000)
 # → {"success": true, "mode": "gpu", "instances": 1000, "completed": 1000,
 #    "results": [...], "stats": {"mean": 3.14, ...}, "total_time_ms": 83.2}
 
 # Validate without executing
-info = tool.validate(source)
+info = tool.validate(emoji_source)
 # → {"valid": true, "tier": 1, "gpu_compatible": true, "num_instructions": 37}
 
 # OpenAI function calling
@@ -252,10 +296,11 @@ emojiasm --agent-mode --runs 1000 examples/monte_carlo_pi.emoji
 
 ```
 emojiasm/
-  __init__.py    Package exports (EmojiASMTool)
+  __init__.py    Package exports (EmojiASMTool, transpile)
   __main__.py    CLI entry point
   parser.py      Emoji tokenizer + assembler
   vm.py          Stack-based virtual machine (CPU)
+  transpiler.py  Python-to-EmojiASM transpiler (ast.NodeVisitor)
   compiler.py    AOT compiler (Program → C → native binary)
   bytecode.py    GPU bytecode encoder (Program → uint32[])
   gpu.py         MLX Metal kernel backend + output buffer
@@ -272,7 +317,8 @@ docs/
   GPU_FEASIBILITY.md GPU execution technical report (101 findings)
 
 examples/           Example .emoji programs
-tests/              607 tests
+examples_py/        Example .py programs (for transpiler)
+tests/              715 tests
 scripts/            Agent runner, KB tools
 kb/                 Knowledge base (185 findings)
 ```

@@ -256,6 +256,9 @@ emojiasm --max-steps N <file>                Override step limit (default 100000
 emojiasm --repl                              Launch interactive REPL
 emojiasm --gpu <file>                        Run on GPU (Metal via MLX)
 emojiasm --gpu --gpu-instances N <file>      N parallel GPU instances (JSON output)
+emojiasm --from-python <file.py>             Transpile Python and run
+emojiasm --from-python <file.py> --gpu       Transpile Python and run on GPU
+emojiasm --transpile <file.py>               Transpile Python to EmojiASM source
 emojiasm --agent-mode <file>                 JSON output with tracing (CPU)
 emojiasm --agent-mode --runs 4 <file>        Parallel CPU VM instances
 emojiasm --agent-mode --trace-steps 10 <file>  Trace every 10 steps
@@ -278,6 +281,45 @@ EmojiASM programs compile to GPU bytecode and run as Metal compute kernels on Ap
 
 ---
 
+## Python Transpiler
+
+Write Python, run as EmojiASM. The transpiler compiles a numeric subset of Python to `Program` objects via `ast.NodeVisitor`.
+
+```bash
+emojiasm --from-python script.py              # transpile and run (CPU)
+emojiasm --transpile script.py                # emit EmojiASM source
+emojiasm --from-python script.py --gpu --gpu-instances 10000  # GPU
+emojiasm --from-python script.py --compile    # AOT compile
+```
+
+```python
+from emojiasm import transpile, transpile_to_source, EmojiASMTool
+
+# Transpile to Program (feeds into VM, GPU, compiler)
+program = transpile("print(6 * 7)")
+
+# Transpile to EmojiASM source text
+asm = transpile_to_source("x = 5\nprint(x + 3)")
+
+# EmojiASMTool integration
+tool = EmojiASMTool()
+result = tool.execute_python("print(42)", n=1000)
+```
+
+**Supported Python subset:**
+- Literals: `int`, `float`, `True`, `False`
+- Arithmetic: `+`, `-`, `*`, `/`, `//`, `%`
+- Comparisons: `==`, `!=`, `<`, `>`, `<=`, `>=`
+- Boolean: `and`, `or`, `not`
+- Control flow: `if`/`elif`/`else`, `while`, `for x in range()`, `break`, `continue`
+- Functions: `def`/`return` (including recursion)
+- I/O: `print()` (single/multi-arg, `end=""`)
+- Random: `import random` + `random.random()`
+
+**Not supported:** strings, lists, dicts, classes, exceptions, generators, f-strings, `**`, `import` beyond random/math.
+
+---
+
 ## LLM Integration
 
 `EmojiASMTool` provides automatic GPU/CPU routing for LLM agents:
@@ -286,10 +328,11 @@ EmojiASM programs compile to GPU bytecode and run as Metal compute kernels on Ap
 from emojiasm import EmojiASMTool
 
 tool = EmojiASMTool(max_instances=10_000)
-result = tool.execute(source, n=1000)       # auto GPU/CPU
-info = tool.validate(source)                # validate without running
-spec = tool.as_tool_spec()                  # OpenAI function calling spec
-result = tool.handle_tool_call(tool_call)   # handle OpenAI tool call
+result = tool.execute(source, n=1000)            # EmojiASM source, auto GPU/CPU
+result = tool.execute_python(py_source, n=1000)  # Python source, auto GPU/CPU
+info = tool.validate(source)                     # validate without running
+spec = tool.as_tool_spec()                       # OpenAI function calling spec
+result = tool.handle_tool_call(tool_call)        # handle OpenAI tool call
 ```
 
 **CPU agent runner** (for bulk CPU execution):
