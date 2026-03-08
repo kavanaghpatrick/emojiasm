@@ -12,7 +12,7 @@ generated: auto
 
 Focus: Get each feature working end-to-end. Skip edge cases, accept minimal implementations.
 
-- [ ] 1.1 Create unified stats module
+- [x] 1.1 Create unified stats module
   - **Do**: Create `emojiasm/stats.py` with `compute_stats(values, histogram_bins=10)` function. Return dict with `mean`, `std`, `min`, `max`, `count`, `median`, `histogram` (dict with `edges` and `counts` lists). Use `statistics.median` from stdlib. Histogram: compute bin edges from min to max, count values in each bin.
   - **Files**: `emojiasm/stats.py`
   - **Done when**: `compute_stats([1,2,3,4,5])` returns dict with all 7 keys, median=3, histogram has edges and counts
