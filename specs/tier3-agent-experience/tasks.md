@@ -57,7 +57,7 @@ Focus: Get each feature working end-to-end. Skip edge cases, accept minimal impl
   - _Requirements: FR-8_
   - _Design: Component D_
 
-- [ ] 1.6 Add source map population in transpiler
+- [x] 1.6 Add source map population in transpiler
   - **Do**: In `PythonTranspiler.__init__()`, add `self._source_lines: list[str] = []`. In `transpile()`, after `ast.parse()`, set `compiler._source_lines = source.splitlines()`. In `_emit()`, when `lineno > 0` and `self._source_lines`, set `Instruction.source = self._source_lines[lineno - 1].strip()`. In `__main__.py`, when `--from-python --debug`, iterate over program functions and print `f"  py:{instr.line_num}: {instr.source}  ->  {op_name} {instr.arg}"` to stderr.
   - **Files**: `emojiasm/transpiler.py`, `emojiasm/__main__.py`
   - **Done when**: `emojiasm --from-python examples/montecarlo.py --debug 2>&1 | head` shows Python line -> instruction mapping

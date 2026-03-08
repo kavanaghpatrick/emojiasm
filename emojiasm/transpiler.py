@@ -331,10 +331,13 @@ class PythonTranspiler(ast.NodeVisitor):
         self._imports: set[str] = set()
         self._func_map: dict[str, str] = {}  # python name -> emoji name
         self._func_idx = 0
+        self._source_lines: list[str] = []
 
     def _emit(self, op: Op, arg=None, node=None):
         lineno = getattr(node, "lineno", 0) if node else 0
         src = ""
+        if self._source_lines and 0 < lineno <= len(self._source_lines):
+            src = self._source_lines[lineno - 1].strip()
         self._current_func.instructions.append(
             Instruction(op=op, arg=arg, line_num=lineno, source=src)
         )
@@ -1605,6 +1608,7 @@ def transpile(source: str) -> Program:
     tree = _rewrite_numpy(tree)
 
     compiler = PythonTranspiler()
+    compiler._source_lines = source.splitlines()
     compiler.visit_Module(tree)
     return compiler.program
 
