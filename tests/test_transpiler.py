@@ -707,3 +707,46 @@ class TestTypeInferenceIntDiv:
         d = disassemble(p)
         # Should contain the PUSH 1.0 coercion for int division
         assert "📥 1.0" in d
+
+
+# ── Numpy shim ───────────────────────────────────────────────────────────
+
+
+class TestNumpyShim:
+    def test_numpy_random_random(self):
+        src = "import numpy as np\nx = np.random.random()\nprint(x)"
+        val = float(run_py(src).strip())
+        assert 0.0 <= val < 1.0
+
+    def test_numpy_sqrt(self):
+        src = "import numpy as np\nprint(np.sqrt(16))"
+        assert run_py(src).strip() == "4.0"
+
+    def test_numpy_pi(self):
+        src = "import numpy as np\nprint(np.pi)"
+        out = run_py(src).strip()
+        assert out.startswith("3.14")
+
+    def test_numpy_random_normal(self):
+        src = "import numpy as np\nx = np.random.normal(0, 1)\nprint(x)"
+        val = float(run_py(src).strip())
+        assert isinstance(val, float)
+
+    def test_numpy_random_uniform(self):
+        src = "import numpy as np\nx = np.random.uniform(1, 10)\nprint(x)"
+        val = float(run_py(src).strip())
+        assert 1.0 <= val < 10.0
+
+    def test_numpy_abs(self):
+        src = "import numpy as np\nprint(np.abs(-5))"
+        assert run_py(src).strip() == "5"
+
+    def test_numpy_sin_cos(self):
+        src = "import numpy as np\nprint(np.sin(0))\nprint(np.cos(0))"
+        out = run_py(src).strip()
+        assert out == "0.0\n1.0"
+
+    def test_numpy_e(self):
+        src = "import numpy as np\nprint(np.e)"
+        out = run_py(src).strip()
+        assert out.startswith("2.71")

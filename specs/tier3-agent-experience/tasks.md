@@ -102,7 +102,7 @@ After POC validated, clean up code.
   - **Commit**: `test(stats): add unit tests for unified stats module`
   - _Requirements: AC-2.1, AC-2.2_
 
-- [ ] 3.2 Unit tests for numpy shim
+- [x] 3.2 Unit tests for numpy shim
   - **Do**: Add tests to `tests/test_transpiler.py`. Test: `np.random.random()`, `np.sqrt()`, `np.pi`, `np.random.normal()`, `np.random.uniform()`, `np.abs()`, unsupported `np.array()` error, `np.linalg.*` error, alias variants.
   - **Files**: `tests/test_transpiler.py`
   - **Done when**: 8+ test cases covering all numpy mappings and error cases
