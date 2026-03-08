@@ -50,7 +50,7 @@ Focus: Change all constants and expand pools. Verify existing tests still pass.
   - _Requirements: FR-1, FR-6_
   - _Design: Component D_
 
-- [ ] 1.5 Expand function emoji pool from 20 to 50+
+- [x] 1.5 Expand function emoji pool from 20 to 50+
   - **Do**: In `emojiasm/transpiler.py`, replace `FUNC_EMOJI_POOL` with an expanded list of 50+ emoji. Use colored circles, squares, diamonds, and other shape/symbol emoji. Ensure no overlap with `EMOJI_POOL`, `EMOJI_TO_OP`, or directives.
   - **Files**: `emojiasm/transpiler.py`
   - **Done when**: `len(FUNC_EMOJI_POOL) >= 50` and no collision with variable pool or opcodes

@@ -67,10 +67,16 @@ EMOJI_POOL = list(
     "🚈🚂🚆🛶🚤🛥🚢"
 )
 
-# Emoji pool for function names
+# Emoji pool for function names (50+ characters)
 FUNC_EMOJI_POOL = list(
+    # Original entries (backward compatible, do not reorder)
     "🔲🔳🟥🟦🟩🟨🟧🟪🟫⬛"
     "⬜❤️💙💚💛🧡💜🤎🖤🤍"
+    # Colored circles and shapes
+    "🔴🟠🟡🟢🔵🟣🟤⚫⚪🔶"
+    "🔷🔸🔹🔺🔻💠🔘"
+    # Zodiac and symbols
+    "♈♉♊♋♌♍♎♏♐♑♒♓⛎"
 )
 
 # Operator mappings
