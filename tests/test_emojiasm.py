@@ -1,7 +1,9 @@
 """Tests for EmojiASM."""
 
+import pytest
+
 from emojiasm.parser import parse
-from emojiasm.vm import VM
+from emojiasm.vm import VM, VMError
 
 
 def run(source: str, max_steps: int = 10000) -> list[str]:
@@ -225,3 +227,60 @@ def test_min():
 def test_max():
     out = run("📥 3\n📥 7\n⬆️\n🖨️\n🛑")
     assert "".join(out).strip() == "7"
+
+
+# --- Array opcodes ---
+
+
+def test_array_alloc_and_store():
+    """Allocate array of 3, store 42 at index 0, load and print it."""
+    out = run("📜 🏠\n  📥 3\n  🗃️ 🅰️\n  📥 0\n  📥 42\n  ✏️ 🅰️\n  📥 0\n  📖 🅰️\n  🖨️\n  🛑")
+    assert "".join(out).strip() == "42"
+
+
+def test_array_load():
+    """Allocate array, store values at indices 0, 1, 2, load each and verify."""
+    src = "\n".join([
+        "📜 🏠",
+        "  📥 3",
+        "  🗃️ 🅰️",
+        "  📥 0",
+        "  📥 10",
+        "  ✏️ 🅰️",
+        "  📥 1",
+        "  📥 20",
+        "  ✏️ 🅰️",
+        "  📥 2",
+        "  📥 30",
+        "  ✏️ 🅰️",
+        "  📥 0",
+        "  📖 🅰️",
+        "  🖨️",
+        "  📥 1",
+        "  📖 🅰️",
+        "  🖨️",
+        "  📥 2",
+        "  📖 🅰️",
+        "  🖨️",
+        "  🛑",
+    ])
+    out = run(src)
+    assert "".join(out).strip() == "10\n20\n30"
+
+
+def test_array_len():
+    """Allocate array of 5, use ALEN to get length, verify it's 5."""
+    out = run("📜 🏠\n  📥 5\n  🗃️ 🅰️\n  🧮 🅰️\n  🖨️\n  🛑")
+    assert "".join(out).strip() == "5"
+
+
+def test_array_bounds_error():
+    """Access index out of bounds raises VMError."""
+    with pytest.raises(VMError):
+        run("📜 🏠\n  📥 3\n  🗃️ 🅰️\n  📥 5\n  📖 🅰️\n  🛑")
+
+
+def test_array_non_array_error():
+    """ALOAD on a scalar cell raises VMError."""
+    with pytest.raises(VMError):
+        run("📜 🏠\n  📥 42\n  💾 🅰️\n  📥 0\n  📖 🅰️\n  🛑")

@@ -30,7 +30,7 @@ Focus: Get arrays working end-to-end in VM + transpiler. Skip GPU/compiler, acce
   - _Requirements: FR-3, FR-4, FR-5, FR-6, FR-7_
   - _Design: Component B_
 
-- [ ] 1.3 Add basic array tests
+- [x] 1.3 Add basic array tests
   - **Do**: Add tests in test_emojiasm.py: test_array_alloc_and_store, test_array_load, test_array_len, test_array_bounds_error, test_array_non_array_error. Use raw EmojiASM source via `run()` helper.
   - **Files**: `tests/test_emojiasm.py`
   - **Done when**: All new tests pass
