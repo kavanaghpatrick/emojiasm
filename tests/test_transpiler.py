@@ -580,3 +580,130 @@ class TestRandomDistributions:
         # Should produce a float (contains a dot)
         val = float(out)
         assert isinstance(val, float)
+
+
+# ── Array operations ─────────────────────────────────────────────────────
+
+
+class TestArrayAlloc:
+    def test_array_alloc(self):
+        """arr = [0.0] * 5 transpiles and runs."""
+        src = "arr = [0.0] * 5\nprint(len(arr))"
+        assert run_py(src).strip() == "5"
+
+
+class TestArraySubscriptRead:
+    def test_array_subscript_read(self):
+        """arr[0] after assignment returns correct value."""
+        src = "arr = [0.0] * 5\narr[0] = 42\nprint(arr[0])"
+        assert run_py(src).strip() == "42"
+
+
+class TestArraySubscriptWrite:
+    def test_array_subscript_write(self):
+        """arr[i] = value stores correctly."""
+        src = "arr = [0.0] * 3\narr[1] = 99\nprint(arr[1])"
+        assert run_py(src).strip() == "99"
+
+
+class TestArrayAugmentedAssign:
+    def test_array_augmented_assign(self):
+        """arr[i] += value works."""
+        src = "arr = [0.0] * 5\narr[2] = 10\narr[2] += 5\nprint(arr[2])"
+        assert run_py(src).strip() == "15"
+
+
+class TestArrayLoopFill:
+    def test_array_loop_fill(self):
+        """for i in range(N): arr[i] = i*i."""
+        src = "arr = [0.0] * 5\nfor i in range(5):\n    arr[i] = i * i\nprint(arr[3])"
+        assert run_py(src).strip() == "9"
+
+
+class TestArraySum:
+    def test_array_sum(self):
+        """sum(arr) returns correct sum."""
+        src = "arr = [0.0] * 3\narr[0] = 1\narr[1] = 2\narr[2] = 3\nprint(sum(arr))"
+        assert run_py(src).strip() == "6.0"
+
+
+class TestArrayLen:
+    def test_array_len(self):
+        """len(arr) returns correct length."""
+        src = "arr = [0.0] * 10\nprint(len(arr))"
+        assert run_py(src).strip() == "10"
+
+
+class TestArraySumFilled:
+    def test_array_sum_filled(self):
+        """Fill array, sum it, verify."""
+        src = "arr = [0.0] * 5\nfor i in range(5):\n    arr[i] = i * i\nprint(sum(arr))"
+        # 0 + 1 + 4 + 9 + 16 = 30
+        assert run_py(src).strip() == "30.0"
+
+
+# ── Constant folding ─────────────────────────────────────────────────────
+
+
+class TestConstantFoldingMul:
+    def test_constant_folding_mul(self):
+        """4.0 * 3.14159 emits fewer instructions (single PUSH)."""
+        from emojiasm.disasm import disassemble
+        p = transpile("x = 4.0 * 3.14159\nprint(x)")
+        d = disassemble(p)
+        # Folded: only 1 PUSH (the folded result), not 3 (two operands + mul)
+        assert d.count("📥") == 1
+
+
+class TestConstantFoldingAdd:
+    def test_constant_folding_add(self):
+        """10 + 20 folds to single PUSH."""
+        from emojiasm.disasm import disassemble
+        p = transpile("x = 10 + 20\nprint(x)")
+        d = disassemble(p)
+        assert d.count("📥") == 1
+        assert run_py("x = 10 + 20\nprint(x)").strip() == "30"
+
+
+class TestConstantFoldingPreservesCorrectness:
+    def test_constant_folding_preserves_correctness(self):
+        """Folded expression produces same result as unfolded."""
+        # Folded: 4.0 * 3.14159 computed at compile time
+        folded = run_py("x = 4.0 * 3.14159\nprint(x)").strip()
+        # Unfolded: use variable to prevent folding
+        unfolded = run_py("a = 4.0\nb = 3.14159\nx = a * b\nprint(x)").strip()
+        assert abs(float(folded) - float(unfolded)) < 1e-10
+
+
+# ── Type inference ───────────────────────────────────────────────────────
+
+
+class TestTypeInferenceFloatDiv:
+    def test_type_inference_float_div(self):
+        """x = 1.0; y = x / 2 works correctly (0.5) and skips coercion."""
+        from emojiasm.disasm import disassemble
+        src = "x = 1.0\ny = x / 2\nprint(y)"
+        assert run_py(src).strip() == "0.5"
+        # Float var: no coercion needed (no PUSH 1.0 MUL pattern)
+        p = transpile(src)
+        d = disassemble(p)
+        # Should not contain the coercion pattern "📥 1.0\n  ✖" before ➗
+        lines = d.split("\n")
+        for i, line in enumerate(lines):
+            if "➗" in line and i >= 2:
+                # The two lines before division should NOT be PUSH 1.0 + MUL
+                assert not (lines[i - 2].strip().startswith("📥 1.0") and "✖" in lines[i - 1])
+
+
+class TestTypeInferenceIntDiv:
+    def test_type_inference_int_div(self):
+        """7 / 2 still produces 3.5 (coercion still applied)."""
+        # Use variable to avoid constant folding
+        src = "x = 7\ny = x / 2\nprint(y)"
+        assert run_py(src).strip() == "3.5"
+        # Int var: coercion should be present
+        from emojiasm.disasm import disassemble
+        p = transpile(src)
+        d = disassemble(p)
+        # Should contain the PUSH 1.0 coercion for int division
+        assert "📥 1.0" in d

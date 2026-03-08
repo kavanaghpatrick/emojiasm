@@ -25,6 +25,7 @@ def _lbl(func_hex: str, label: str) -> str:
 _PREAMBLE_NUMERIC = """\
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <math.h>
 
@@ -94,7 +95,7 @@ def _uses_strings(program: Program) -> bool:
 
 # ── Instruction emitter ────────────────────────────────────────────────────
 
-def _emit_inst(inst: Instruction, lines: list, fhex: str, mem: dict, numeric_only: bool = True) -> None:
+def _emit_inst(inst: Instruction, lines: list, fhex: str, mem: dict, numeric_only: bool = True, arr: dict | None = None) -> None:
     op, arg = inst.op, inst.arg
     A = lines.append  # shorthand
 
@@ -227,6 +228,31 @@ def _emit_inst(inst: Instruction, lines: list, fhex: str, mem: dict, numeric_onl
 
     elif op == Op.LOAD:
         A(f'    _stk[_sp++] = {mem[arg]};')
+
+    elif op == Op.ALLOC:
+        a = arr[arg]
+        if numeric_only:
+            A(f'    {{ int sz=(int)POP(); {a}_sz=sz; memset({a},0,sz*sizeof(double)); }}')
+        else:
+            A(f'    {{ int sz=(int)POP().num; {a}_sz=sz; memset({a},0,sz*sizeof(Val)); }}')
+
+    elif op == Op.ALOAD:
+        a = arr[arg]
+        if numeric_only:
+            A(f'    {{ int i=(int)POP(); PUSH_N({a}[i]); }}')
+        else:
+            A(f'    {{ int i=(int)POP().num; _stk[_sp]={a}[i]; _sp++; }}')
+
+    elif op == Op.ASTORE:
+        a = arr[arg]
+        if numeric_only:
+            A(f'    {{ double v=POP(); int i=(int)POP(); {a}[i]=v; }}')
+        else:
+            A(f'    {{ Val v=POP(); int i=(int)POP().num; {a}[i]=v; }}')
+
+    elif op == Op.ALEN:
+        a = arr[arg]
+        A(f'    PUSH_N((double){a}_sz);')
 
     elif op == Op.CALL:
         A(f'    {_fn(arg)}();')
@@ -388,6 +414,21 @@ def compile_to_c(program: Program) -> str:
     if mem:
         lines.append('')
 
+    # Collect all array cells across all functions
+    arr: dict[str, str] = {}  # emoji -> c_name
+    aidx = 0
+    for func in program.functions.values():
+        for inst in func.instructions:
+            if inst.op in (Op.ALLOC, Op.ALOAD, Op.ASTORE, Op.ALEN) and inst.arg not in arr:
+                arr[inst.arg] = f"_arr{aidx}"
+                aidx += 1
+
+    arr_elem_type = "double" if numeric_only else "Val"
+    for emoji, c_name in arr.items():
+        lines.append(f'static {arr_elem_type} {c_name}[256]; static int {c_name}_sz = 0; /* {emoji} */')
+    if arr:
+        lines.append('')
+
     # Forward declarations
     for name in program.functions:
         lines.append(f'static void {_fn(name)}(void);')
@@ -406,7 +447,7 @@ def compile_to_c(program: Program) -> str:
         for ip, inst in enumerate(func.instructions):
             for lbl in ip_labels.get(ip, []):
                 lines.append(f'  {_lbl(fhex, lbl)}:;')
-            _emit_inst(inst, lines, fhex, mem, numeric_only)
+            _emit_inst(inst, lines, fhex, mem, numeric_only, arr)
 
         lines.append('}')
         lines.append('')
