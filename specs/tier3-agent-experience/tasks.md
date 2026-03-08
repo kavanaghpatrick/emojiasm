@@ -128,7 +128,7 @@ After POC validated, clean up code.
 
 ## Phase 4: Quality Gates
 
-- [ ] 4.1 Local quality check
+- [x] 4.1 Local quality check
   - **Do**: Run all quality checks locally: `pytest tests/ -x -q`, type check if configured, lint check
   - **Verify**: All tests pass, no lint errors
   - **Done when**: All 448+ existing tests pass plus new tests
