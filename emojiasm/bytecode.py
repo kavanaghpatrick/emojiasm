@@ -16,7 +16,7 @@ GPU tier classification (extends _uses_strings(), KB #106):
     Tier 2: Numeric + output (PRINT/PRINTLN but no INPUT; GPU with output buffer)
     Tier 3: Full features (INPUT/strings require CPU fallback)
 
-Max stack depth capped at 128 entries in device memory (KB #147).
+Max stack depth capped at 256 entries in device memory (KB #147).
 """
 
 from __future__ import annotations
@@ -299,7 +299,7 @@ def _analyze_max_stack_depth(program: Program) -> int:
     """Conservative max stack depth via instruction walk.
 
     Walks each function linearly (ignoring branches — conservative because
-    we take the max across all instruction positions). Caps at 128 per
+    we take the max across all instruction positions). Caps at 256 per
     KB #147 GPU memory budget.
     """
     max_depth = 0

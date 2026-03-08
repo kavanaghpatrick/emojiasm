@@ -17,7 +17,7 @@ Supported Python subset:
 from __future__ import annotations
 
 import ast
-from .opcodes import Op
+from .opcodes import Op, EMOJI_TO_OP
 from .parser import Program, Function, Instruction
 from .disasm import disassemble
 
@@ -78,6 +78,39 @@ FUNC_EMOJI_POOL = list(
     # Zodiac and symbols
     "♈♉♊♋♌♍♎♏♐♑♒♓⛎"
 )
+
+def _validate_emoji_pools() -> None:
+    """Check emoji pools for duplicates and cross-pool collisions.
+
+    Called at module load time. Raises RuntimeError if:
+    - FUNC_EMOJI_POOL has duplicate entries
+    - EMOJI_POOL has duplicate entries
+    - FUNC_EMOJI_POOL and EMOJI_POOL overlap
+
+    Note: Collisions with opcode emoji (EMOJI_TO_OP) are acceptable because
+    the parser distinguishes opcode context from STORE/LOAD memory cell names.
+    """
+    func_dupes = len(FUNC_EMOJI_POOL) - len(set(FUNC_EMOJI_POOL))
+    if func_dupes:
+        raise RuntimeError(
+            f"FUNC_EMOJI_POOL has {func_dupes} duplicate entries"
+        )
+
+    var_dupes = len(EMOJI_POOL) - len(set(EMOJI_POOL))
+    if var_dupes:
+        raise RuntimeError(
+            f"EMOJI_POOL has {var_dupes} duplicate entries"
+        )
+
+    overlap = set(FUNC_EMOJI_POOL) & set(EMOJI_POOL)
+    if overlap:
+        raise RuntimeError(
+            f"FUNC_EMOJI_POOL and EMOJI_POOL overlap: {overlap}"
+        )
+
+
+_validate_emoji_pools()
+
 
 # Operator mappings
 _BINOP_MAP = {

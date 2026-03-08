@@ -67,7 +67,7 @@ Focus: Change all constants and expand pools. Verify existing tests still pass.
 
 ## Phase 2: Refactoring
 
-- [ ] 2.1 Update docstrings and comments for new limits
+- [x] 2.1 Update docstrings and comments for new limits
   - **Do**:
     1. In `emojiasm/transpiler.py`, update the comment `# Emoji pool for variable memory cells (50 characters)` to reflect new count
     2. Update the comment `# Emoji pool for function names` similarly
@@ -79,7 +79,7 @@ Focus: Change all constants and expand pools. Verify existing tests still pass.
   - **Commit**: `docs: update comments for new capacity limits`
   - _Design: All components_
 
-- [ ] 2.2 Add collision validation utility
+- [x] 2.2 Add collision validation utility
   - **Do**: Add a `_validate_emoji_pools()` function in `transpiler.py` that checks for collisions between `EMOJI_POOL`, `FUNC_EMOJI_POOL`, and `EMOJI_TO_OP`/directives. Call it at module load (once) and raise `RuntimeError` if collisions found that would cause parsing ambiguity. Note: collisions with opcodes used only as memory cell names (STORE/LOAD args) are acceptable since the parser distinguishes these contexts.
   - **Files**: `emojiasm/transpiler.py`
   - **Done when**: Function exists and runs at import time without error
