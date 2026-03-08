@@ -139,7 +139,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
   - _Requirements: FR-22_
   - _Design: N/A_
 
-- [ ] 3.2 Add example program using new math ops
+- [x] 3.2 Add example program using new math ops
   - **Do**: Create `examples/math_functions.emoji` demonstrating all 9 new opcodes. Include: power (2^10), sqrt(16), sin/cos of pi/4, exp(1), log(e), abs(-42), min/max of pairs. Print results with labels using PRINTS+ADD pattern.
   - **Files**: `examples/math_functions.emoji`
   - **Done when**: `emojiasm examples/math_functions.emoji` runs and produces correct output
