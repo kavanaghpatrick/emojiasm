@@ -103,7 +103,7 @@ After POC validated, extend to all backends.
   - _Requirements: FR-17_
   - _Design: Component F_
 
-- [ ] 2.3 Metal kernel: add array storage and opcode handling
+- [x] 2.3 Metal kernel: add array storage and opcode handling
   - **Do**: In vm.metal: (1) Add constants `MAX_ARRAYS = 8`, `MAX_ARRAY_SIZE = 256`. (2) Add opcode constants `OP_ALLOC = 0x42`, `OP_ALOAD = 0x43`, `OP_ASTORE = 0x44`, `OP_ALEN = 0x45`. (3) Add per-thread arrays: `float arrays[MAX_ARRAYS][MAX_ARRAY_SIZE]; int array_sizes[MAX_ARRAYS];` with zero initialization. (4) Add 4 switch cases: ALLOC (pop size, set array_sizes, zero-fill), ALOAD (pop index, bounds check, push), ASTORE (pop value+index, bounds check, store), ALEN (push size).
   - **Files**: `emojiasm/metal/vm.metal`
   - **Done when**: Metal kernel compiles with new opcodes (validated by GPU tests if MLX available)

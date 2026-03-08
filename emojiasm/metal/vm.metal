@@ -54,6 +54,15 @@ constant uint8_t OP_NOP     = 0x36;
 constant uint8_t OP_STORE   = 0x40;
 constant uint8_t OP_LOAD    = 0x41;
 
+// Arrays
+#define MAX_ARRAYS      8
+#define MAX_ARRAY_SIZE  256
+
+constant uint8_t OP_ALLOC   = 0x42;
+constant uint8_t OP_ALOAD   = 0x43;
+constant uint8_t OP_ASTORE  = 0x44;
+constant uint8_t OP_ALEN    = 0x45;
+
 // I/O
 constant uint8_t OP_PRINT   = 0x50;
 constant uint8_t OP_PRINTLN = 0x51;
@@ -215,6 +224,13 @@ kernel void emojiasm_vm(
     float memory[NUM_MEMORY_CELLS];
     for (int i = 0; i < NUM_MEMORY_CELLS; i++) {
         memory[i] = 0.0f;
+    }
+
+    // Per-thread array storage
+    float arrays[MAX_ARRAYS][MAX_ARRAY_SIZE];
+    int array_sizes[MAX_ARRAYS];
+    for (int a = 0; a < MAX_ARRAYS; a++) {
+        array_sizes[a] = 0;
     }
 
     // Instruction pointer
@@ -556,6 +572,99 @@ kernel void emojiasm_vm(
                 break;
             }
             stack[sp] = memory[operand];
+            sp++;
+            break;
+        }
+
+        // ── Arrays ────────────────────────────────────────────────────────
+
+        case OP_ALLOC: {
+            if (sp < 1) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            int cell = operand;
+            if (cell >= MAX_ARRAYS) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            int sz = (int)stack[--sp];
+            if (sz < 0 || sz > MAX_ARRAY_SIZE) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            array_sizes[cell] = sz;
+            for (int j = 0; j < sz; j++) arrays[cell][j] = 0.0f;
+            break;
+        }
+
+        case OP_ALOAD: {
+            if (sp < 1) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            int cell = operand;
+            if (cell >= MAX_ARRAYS) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            int idx = (int)stack[--sp];
+            if (idx < 0 || idx >= array_sizes[cell]) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            if (sp >= int(stack_depth)) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            stack[sp] = arrays[cell][idx];
+            sp++;
+            break;
+        }
+
+        case OP_ASTORE: {
+            if (sp < 2) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            int cell = operand;
+            if (cell >= MAX_ARRAYS) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            float val = stack[--sp];
+            int idx = (int)stack[--sp];
+            if (idx < 0 || idx >= array_sizes[cell]) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            arrays[cell][idx] = val;
+            break;
+        }
+
+        case OP_ALEN: {
+            int cell = operand;
+            if (cell >= MAX_ARRAYS) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            if (sp >= int(stack_depth)) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            stack[sp] = (float)array_sizes[cell];
             sp++;
             break;
         }
