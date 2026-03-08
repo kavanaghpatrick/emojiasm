@@ -21,7 +21,7 @@ Focus: Get arrays working end-to-end in VM + transpiler. Skip GPU/compiler, acce
   - _Requirements: FR-1, FR-2_
   - _Design: Component A_
 
-- [ ] 1.2 Implement array opcodes in VM
+- [x] 1.2 Implement array opcodes in VM
   - **Do**: Add 4 new `case Op.X:` branches in `_exec_function` match statement. ALLOC: `size = self._pop(); self.memory[arg] = [0.0] * int(size)`. ALOAD: `idx = self._pop(); arr = self.memory[arg]; self._push(arr[int(idx)])`. ASTORE: `val = self._pop(); idx = self._pop(); arr = self.memory[arg]; arr[int(idx)] = val`. ALEN: `self._push(len(self.memory[arg]))`. Add bounds checking and type checking (verify cell is a list). Raise VMError with descriptive messages.
   - **Files**: `emojiasm/vm.py`
   - **Done when**: VM can execute handwritten EmojiASM programs with arrays
