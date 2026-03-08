@@ -94,7 +94,7 @@ After POC validated, clean up code.
 
 ## Phase 3: Testing
 
-- [ ] 3.1 Unit tests for stats module
+- [x] 3.1 Unit tests for stats module
   - **Do**: Create `tests/test_stats.py`. Test: empty list, single value, normal distribution, median odd/even count, histogram bin counts sum to total, histogram edges monotonic, NaN/inf handling.
   - **Files**: `tests/test_stats.py`
   - **Done when**: 8+ test cases covering all stats functions
