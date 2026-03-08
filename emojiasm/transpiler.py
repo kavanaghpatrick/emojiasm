@@ -489,17 +489,8 @@ class PythonTranspiler(ast.NodeVisitor):
                 node.lineno,
             )
 
-    def visit_Compare(self, node: ast.Compare):
-        if len(node.ops) > 1:
-            raise TranspileError(
-                "Chained comparisons not supported. Use 'a < b and b < c' instead.",
-                node.lineno,
-            )
-
-        self.visit(node.left)
-        self.visit(node.comparators[0])
-        cmp_op = node.ops[0]
-
+    def _emit_cmp_op(self, cmp_op, node):
+        """Emit comparison opcodes for a single comparison operator."""
         if isinstance(cmp_op, ast.Eq):
             self._emit(Op.CMP_EQ, node=node)
         elif isinstance(cmp_op, ast.NotEq):
@@ -520,6 +511,46 @@ class PythonTranspiler(ast.NodeVisitor):
                 f"Unsupported comparison: {type(cmp_op).__name__}",
                 node.lineno,
             )
+
+    def visit_Compare(self, node: ast.Compare):
+        n = len(node.ops)
+        self.visit(node.left)
+
+        for i, (cmp_op, comparator) in enumerate(
+            zip(node.ops, node.comparators)
+        ):
+            is_last = i == n - 1
+
+            self.visit(comparator)
+
+            if not is_last:
+                # Save comparator for next comparison:
+                # stack: [..., left_val, comp] -> DUP -> [..., left_val, comp, comp_copy]
+                # ROT -> [..., comp, comp_copy, left_val]
+                # SWAP -> [..., comp, left_val, comp_copy]
+                # Now CMP will consume left_val and comp_copy correctly
+                self._emit(Op.DUP, node=node)
+                self._emit(Op.ROT, node=node)
+                self._emit(Op.SWAP, node=node)
+
+            self._emit_cmp_op(cmp_op, node)
+
+            if i > 0 and not is_last:
+                # Combine with previous result: stack is [prev_result, saved_comp, cmp_result]
+                # ROT -> [saved_comp, cmp_result, prev_result]
+                # AND -> [saved_comp, combined]
+                # SWAP -> [combined, saved_comp]
+                self._emit(Op.ROT, node=node)
+                self._emit(Op.AND, node=node)
+                self._emit(Op.SWAP, node=node)
+            elif i > 0 and is_last:
+                # Last comparison, combine with accumulated result
+                # stack: [accumulated, cmp_result] -> AND -> [final]
+                self._emit(Op.AND, node=node)
+            elif not is_last:
+                # First comparison (i==0), not last: swap result below saved comparator
+                # stack: [saved_comp, cmp_result] -> SWAP -> [cmp_result, saved_comp]
+                self._emit(Op.SWAP, node=node)
 
     def visit_BoolOp(self, node: ast.BoolOp):
         self.visit(node.values[0])

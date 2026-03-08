@@ -401,9 +401,10 @@ class TestErrors:
         with pytest.raises(TranspileError, match="before assignment"):
             transpile("print(x)")
 
-    def test_chained_comparison(self):
-        with pytest.raises(TranspileError, match="[Cc]hained"):
-            transpile("print(1 < 2 < 3)")
+    def test_chained_comparison_now_supported(self):
+        # Chained comparisons are now supported
+        out = run_py("print(1 < 2 < 3)")
+        assert out.strip() == "1"
 
     def test_power_operator_now_supported(self):
         # ** operator is now supported via POW opcode

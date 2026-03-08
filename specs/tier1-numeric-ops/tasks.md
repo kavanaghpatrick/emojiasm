@@ -48,7 +48,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
   - _Requirements: FR-10 through FR-15_
   - _Design: Component 7a, 7b, 7c, 7d_
 
-- [ ] 1.5 Add transpiler support for chained comparisons
+- [x] 1.5 Add transpiler support for chained comparisons
   - **Do**: In `visit_Compare`, replace the `len(node.ops) > 1` error. Extract comparison emission to `_emit_cmp_op(self, cmp_op, node)` helper. For chained comparisons `a op1 b op2 c ...`: visit left, then for each (op, comparator): visit comparator, if not last: DUP + ROT, emit comparison, if i > 0: AND, if not last: SWAP. Handle all comparison types: Lt, Gt, LtE, GtE, Eq, NotEq. LtE and GtE use CMP_GT+NOT and CMP_LT+NOT respectively (existing pattern).
   - **Files**: `emojiasm/transpiler.py`
   - **Done when**: `print(1 < 2 < 3)` transpiles and outputs `1`, `print(1 < 3 < 2)` outputs `0`
