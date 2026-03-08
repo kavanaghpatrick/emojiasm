@@ -61,6 +61,17 @@ constant uint8_t OP_PRINTLN = 0x51;
 // Random
 constant uint8_t OP_RANDOM  = 0x60;
 
+// Math
+constant uint8_t OP_POW     = 0x15;
+constant uint8_t OP_SQRT    = 0x16;
+constant uint8_t OP_SIN     = 0x17;
+constant uint8_t OP_COS     = 0x18;
+constant uint8_t OP_EXP     = 0x19;
+constant uint8_t OP_LOG     = 0x1A;
+constant uint8_t OP_ABS     = 0x1B;
+constant uint8_t OP_MIN     = 0x1C;
+constant uint8_t OP_MAX     = 0x1D;
+
 // ── Status codes ────────────────────────────────────────────────────────
 
 constant uint32_t STATUS_OK         = 0;
@@ -617,6 +628,101 @@ kernel void emojiasm_vm(
             }
             stack[sp] = philox_random(rng);
             sp++;
+            break;
+        }
+
+        // ── Math ──────────────────────────────────────────────────────────
+
+        case OP_POW: {
+            if (sp < 2) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            sp--;
+            stack[sp - 1] = pow(stack[sp - 1], stack[sp]);
+            break;
+        }
+
+        case OP_SQRT: {
+            if (sp < 1) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            stack[sp - 1] = sqrt(stack[sp - 1]);
+            break;
+        }
+
+        case OP_SIN: {
+            if (sp < 1) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            stack[sp - 1] = sin(stack[sp - 1]);
+            break;
+        }
+
+        case OP_COS: {
+            if (sp < 1) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            stack[sp - 1] = cos(stack[sp - 1]);
+            break;
+        }
+
+        case OP_EXP: {
+            if (sp < 1) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            stack[sp - 1] = exp(stack[sp - 1]);
+            break;
+        }
+
+        case OP_LOG: {
+            if (sp < 1) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            stack[sp - 1] = log(stack[sp - 1]);
+            break;
+        }
+
+        case OP_ABS: {
+            if (sp < 1) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            stack[sp - 1] = fabs(stack[sp - 1]);
+            break;
+        }
+
+        case OP_MIN: {
+            if (sp < 2) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            sp--;
+            stack[sp - 1] = min(stack[sp - 1], stack[sp]);
+            break;
+        }
+
+        case OP_MAX: {
+            if (sp < 2) {
+                status[tid] = STATUS_ERROR;
+                running = false;
+                break;
+            }
+            sp--;
+            stack[sp - 1] = max(stack[sp - 1], stack[sp]);
             break;
         }
 

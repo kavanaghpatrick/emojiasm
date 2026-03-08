@@ -92,7 +92,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
   - _Requirements: FR-1 through FR-9, FR-21_
   - _Design: Component 3_
 
-- [ ] 2.2 Add Metal kernel dispatch for 9 new opcodes
+- [x] 2.2 Add Metal kernel dispatch for 9 new opcodes
   - **Do**: In `metal/vm.metal`: Add 9 opcode constants after `OP_RANDOM` (OP_POW=0x15 through OP_MAX=0x1D). Add 9 switch cases in the dispatch loop. Binary ops (POW, MIN, MAX) follow OP_MUL pattern: check sp<2, decrement sp, apply MSL function. Unary ops (SQRT, SIN, COS, EXP, LOG, ABS) follow OP_NOT pattern: check sp<1, apply MSL function in-place. MSL functions: `pow()`, `sqrt()`, `sin()`, `cos()`, `exp()`, `log()`, `abs()` (or `fabs()`), `min()`, `max()`.
   - **Files**: `emojiasm/metal/vm.metal`
   - **Done when**: Metal shader compiles without errors (validated by gpu.py tests)
