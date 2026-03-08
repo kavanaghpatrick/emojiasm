@@ -707,3 +707,184 @@ class TestTypeInferenceIntDiv:
         d = disassemble(p)
         # Should contain the PUSH 1.0 coercion for int division
         assert "📥 1.0" in d
+
+
+# ── Numpy shim ───────────────────────────────────────────────────────────
+
+
+class TestNumpyShim:
+    def test_numpy_random_random(self):
+        src = "import numpy as np\nx = np.random.random()\nprint(x)"
+        val = float(run_py(src).strip())
+        assert 0.0 <= val < 1.0
+
+    def test_numpy_sqrt(self):
+        src = "import numpy as np\nprint(np.sqrt(16))"
+        assert run_py(src).strip() == "4.0"
+
+    def test_numpy_pi(self):
+        src = "import numpy as np\nprint(np.pi)"
+        out = run_py(src).strip()
+        assert out.startswith("3.14")
+
+    def test_numpy_random_normal(self):
+        src = "import numpy as np\nx = np.random.normal(0, 1)\nprint(x)"
+        val = float(run_py(src).strip())
+        assert isinstance(val, float)
+
+    def test_numpy_random_uniform(self):
+        src = "import numpy as np\nx = np.random.uniform(1, 10)\nprint(x)"
+        val = float(run_py(src).strip())
+        assert 1.0 <= val < 10.0
+
+    def test_numpy_abs(self):
+        src = "import numpy as np\nprint(np.abs(-5))"
+        assert run_py(src).strip() == "5"
+
+    def test_numpy_sin_cos(self):
+        src = "import numpy as np\nprint(np.sin(0))\nprint(np.cos(0))"
+        out = run_py(src).strip()
+        assert out == "0.0\n1.0"
+
+    def test_numpy_e(self):
+        src = "import numpy as np\nprint(np.e)"
+        out = run_py(src).strip()
+        assert out.startswith("2.71")
+
+
+# ── Auto-parallelization ───────────────────────────────────────────────
+
+
+class TestAutoParallelization:
+    def test_single_instance_detection_positive(self):
+        """Monte Carlo pi pattern IS detected as single-instance."""
+        import ast
+        from emojiasm.transpiler import _is_single_instance
+
+        src = (
+            "import random\n"
+            "x = random.random()\n"
+            "y = random.random()\n"
+            "result = x*x + y*y <= 1.0"
+        )
+        tree = ast.parse(src)
+        assert _is_single_instance(tree) is True
+
+    def test_single_instance_detection_negative(self):
+        """Program with large for-loop is NOT single-instance."""
+        import ast
+        from emojiasm.transpiler import _is_single_instance
+
+        src = (
+            "import random\n"
+            "s = 0\n"
+            "for i in range(1000):\n"
+            "    s += random.random()\n"
+            "result = s"
+        )
+        tree = ast.parse(src)
+        assert _is_single_instance(tree) is False
+
+    def test_result_capture(self):
+        """Program with result = expr has result value printed after capture."""
+        import ast
+        from emojiasm.transpiler import _is_single_instance, _ensure_result_capture
+
+        src = (
+            "import random\n"
+            "x = random.random()\n"
+            "result = x * 2"
+        )
+        tree = ast.parse(src)
+        assert _is_single_instance(tree) is True
+
+        tree = _ensure_result_capture(tree)
+        unparsed = ast.unparse(tree)
+        # Should have appended print(result)
+        assert "print(result)" in unparsed
+
+    def test_execute_python_parallel(self):
+        """execute_python(source, n=50) returns 50 results."""
+        from emojiasm.inference import EmojiASMTool
+
+        tool = EmojiASMTool(prefer_gpu=False)
+        src = (
+            "import random\n"
+            "x = random.random()\n"
+            "y = random.random()\n"
+            "result = x*x + y*y <= 1.0"
+        )
+        r = tool.execute_python(src, n=50)
+        assert r["completed"] == 50
+        assert len(r["results"]) == 50
+
+    def test_parallel_stats_in_result(self):
+        """Result from execute_python includes stats with mean, std, etc."""
+        from emojiasm.inference import EmojiASMTool
+
+        tool = EmojiASMTool(prefer_gpu=False)
+        src = (
+            "import random\n"
+            "x = random.random()\n"
+            "y = random.random()\n"
+            "result = x*x + y*y <= 1.0"
+        )
+        r = tool.execute_python(src, n=50)
+        stats = r["stats"]
+        assert "mean" in stats
+        assert "std" in stats
+        assert "min" in stats
+        assert "max" in stats
+        assert "count" in stats
+        # Mean of boolean (0 or 1) should be between 0 and 1
+        assert 0.0 <= stats["mean"] <= 1.0
+
+
+# ── Error message suggestions ───────────────────────────────────────────
+
+
+class TestErrorMessages:
+    def test_error_list_literal_suggestion(self):
+        """List literal error suggests fixed-size arrays."""
+        with pytest.raises(TranspileError, match=r"\[0\.0\] \* N"):
+            transpile("x = [1,2,3]")
+
+    def test_error_non_range_for(self):
+        """Non-range for loop error mentions range()."""
+        with pytest.raises(TranspileError, match="range"):
+            transpile("for x in items:\n    pass")
+
+    def test_error_unsupported_import(self):
+        """Unsupported import error suggests random + math."""
+        with pytest.raises(TranspileError, match="random.*math|math.*random"):
+            transpile("import os")
+
+
+# ── Source map tests ─────────────────────────────────────────────────────
+
+
+class TestSourceMap:
+    def test_source_map_simple(self):
+        """Transpiled program has instructions with populated source field."""
+        p = transpile("x = 42\nprint(x)")
+        instrs = p.functions["🏠"].instructions
+        sources = [i.source for i in instrs if i.source]
+        assert len(sources) > 0
+
+    def test_source_map_correct_line(self):
+        """First instruction's source should be 'x = 42'."""
+        p = transpile("x = 42\nprint(x)")
+        first = p.functions["🏠"].instructions[0]
+        assert first.source == "x = 42"
+
+    def test_source_map_multiline(self):
+        """Multi-line program has correct source for each line's instructions."""
+        src = "x = 42\ny = 10\nprint(x + y)"
+        p = transpile(src)
+        instrs = p.functions["🏠"].instructions
+
+        # Collect unique source lines from instructions
+        source_set = {i.source for i in instrs if i.source}
+        assert "x = 42" in source_set
+        assert "y = 10" in source_set
+        assert "print(x + y)" in source_set

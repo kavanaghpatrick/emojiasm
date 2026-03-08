@@ -93,6 +93,37 @@ _UNSUPPORTED_SYNTAX = {
     "Starred": "Star expressions not supported.",
 }
 
+# Maps common unsupported patterns to actionable suggestions
+_SUGGESTION_MAP: dict[str, str] = {
+    # Unsupported function calls -> closest supported alternative
+    "int": "Use `x // 1` for integer conversion",
+    "float": "Use `x * 1.0` for float conversion",
+    "round": "Use `int(x + 0.5)` or `x // 1` for rounding",
+    "str": "String conversion not supported; use print() for output",
+    "input": "Interactive input not supported; use variable assignment instead",
+    "type": "Type checking not supported at runtime",
+    "isinstance": "Type checking not supported at runtime",
+    "enumerate": "Use `for i in range(len(arr))` with `arr[i]` instead of enumerate()",
+    "zip": "Use index-based loops instead of zip()",
+    "map": "Use a for loop instead of map()",
+    "filter": "Use a for loop with if instead of filter()",
+    "sorted": "Sorting not supported; use manual comparison loops",
+    "reversed": "Use `for i in range(N-1, -1, -1)` instead of reversed()",
+    "list": "Use `arr = [0.0] * N` for fixed-size arrays",
+    "dict": "Dictionaries not supported; use arrays with index mapping",
+    "set": "Sets not supported; use arrays",
+    "tuple": "Tuples not supported; use separate variables",
+    "open": "File I/O not supported",
+    "pow": "Use `x ** y` or `math.exp(y * math.log(x))` instead of pow()",
+    "math.floor": "Use `x // 1` for floor",
+    "math.ceil": "Use `-((-x) // 1)` for ceil",
+    "math.pow": "Use `x ** y` operator instead of math.pow()",
+    "math.fabs": "Use `abs(x)` instead of math.fabs()",
+    "random.randint": "Use `int(random.uniform(a, b+1))` instead of randint()",
+    "random.choice": "Use `arr[int(random.random() * len(arr))]` instead of choice()",
+    "random.shuffle": "Shuffling not supported; use Fisher-Yates with random.random()",
+}
+
 
 class VarManager:
     """Maps Python variable names to emoji memory cells."""
@@ -145,6 +176,340 @@ class LabelGenerator:
         return f"{prefix}{self._counter}"
 
 
+# ── Numpy shim AST rewriter ──────────────────────────────────────────────
+
+
+class NumpyShim(ast.NodeTransformer):
+    """Rewrite numpy API calls in a Python AST to stdlib equivalents.
+
+    EmojiASM does not support numpy, but many LLM-generated programs use it
+    for simple math and random operations.  This transformer detects
+    ``import numpy as np`` (or ``import numpy``, or any alias) and rewrites
+    the supported subset of numpy calls to their ``random`` / ``math`` /
+    builtin equivalents so the transpiler can handle them.
+
+    **Supported rewrites:**
+
+    =====================  ============================
+    numpy call             stdlib replacement
+    =====================  ============================
+    np.random.random()     random.random()
+    np.random.normal(m,s)  random.gauss(m,s)
+    np.random.uniform(a,b) random.uniform(a,b)
+    np.sqrt(x)             math.sqrt(x)
+    np.sin(x)              math.sin(x)
+    np.cos(x)              math.cos(x)
+    np.exp(x)              math.exp(x)
+    np.log(x)              math.log(x)
+    np.abs(x)              abs(x)
+    np.pi                  math.pi
+    np.e                   math.e
+    =====================  ============================
+
+    **Unsupported (raises TranspileError):**
+
+    - ``from numpy import *`` — ambiguous scope
+    - ``np.array()``, ``np.zeros()``, ``np.ones()`` — use ``[0.0] * N``
+    - ``np.linalg.*`` — not available
+
+    Usage::
+
+        shim = NumpyShim(tree)
+        tree = shim.apply()
+    """
+
+    # ── Mapping tables ────────────────────────────────────────────────
+
+    # np.<func>(x) -> (module | None, function_name)
+    # None means builtin (no module prefix).
+    FUNC_REWRITES: dict[str, tuple[str | None, str]] = {
+        "sqrt": ("math", "sqrt"),
+        "sin": ("math", "sin"),
+        "cos": ("math", "cos"),
+        "exp": ("math", "exp"),
+        "log": ("math", "log"),
+        "abs": (None, "abs"),  # builtin
+    }
+
+    # np.random.<func> -> random.<func>
+    RANDOM_REWRITES: dict[str, str] = {
+        "random": "random",
+        "normal": "gauss",
+        "uniform": "uniform",
+    }
+
+    # np.<constant> -> math.<constant>
+    CONST_REWRITES: dict[str, str] = {
+        "pi": "pi",
+        "e": "e",
+    }
+
+    # np.<unsupported>() — raise helpful errors
+    _UNSUPPORTED_FUNCS: dict[str, str] = {
+        "array": "Use `arr = [0.0] * N` for fixed-size arrays",
+        "zeros": "Use `arr = [0.0] * N` for zero-initialized arrays",
+        "ones": "Use `arr = [1.0] * N` for one-initialized arrays",
+        "arange": "Use `for i in range(N)` instead of np.arange()",
+        "linspace": "Use a for-loop with manual step calculation",
+        "mean": "Use `sum(values) / len(values)` instead",
+        "sum": "Use builtin `sum()` or a for-loop accumulator",
+    }
+
+    # np.linalg.* and np.fft.* — entire submodules unsupported
+    _UNSUPPORTED_SUBMODULES: set[str] = {"linalg", "fft", "ma", "polynomial"}
+
+    def __init__(self, tree: ast.Module) -> None:
+        """Initialize the shim with a parsed AST.
+
+        Args:
+            tree: The parsed AST module to transform.
+
+        Raises:
+            TranspileError: If ``from numpy import *`` is detected.
+        """
+        self._tree = tree
+        self._alias: str | None = None
+        self._existing_imports: set[str] = set()
+
+    def apply(self) -> ast.Module:
+        """Run all three passes and return the transformed AST.
+
+        Returns:
+            The rewritten AST with numpy calls replaced by stdlib calls.
+            If no numpy import is found, returns the tree unchanged.
+        """
+        self._scan_imports()
+        if self._alias is None:
+            return self._tree
+
+        # Rewrite AST nodes (visit_Call / visit_Attribute)
+        self._tree = self.visit(self._tree)
+
+        # Replace numpy import with random + math
+        self._replace_imports()
+
+        ast.fix_missing_locations(self._tree)
+        return self._tree
+
+    # ── Pass 1: import scanning ───────────────────────────────────────
+
+    def _scan_imports(self) -> None:
+        """Scan top-level imports to find the numpy alias and existing imports.
+
+        Detects all import styles:
+        - ``import numpy`` -> alias = "numpy"
+        - ``import numpy as np`` -> alias = "np"
+        - ``import numpy as npy`` -> alias = "npy" (any alias)
+        - ``from numpy import *`` -> raises TranspileError
+
+        Raises:
+            TranspileError: If ``from numpy import *`` is used.
+        """
+        for node in ast.iter_child_nodes(self._tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "numpy":
+                        self._alias = alias.asname or "numpy"
+                    else:
+                        self._existing_imports.add(alias.name)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module == "numpy":
+                    # Detect `from numpy import *`
+                    for alias in node.names:
+                        if alias.name == "*":
+                            raise TranspileError(
+                                "`from numpy import *` is not supported. "
+                                "Use `import numpy as np` and call functions "
+                                "as `np.sqrt()`, `np.random.random()`, etc.",
+                                getattr(node, "lineno", 0),
+                            )
+                    # `from numpy import sqrt, pi` — treat as alias "numpy"
+                    # so that bare names like sqrt() get handled by the
+                    # transpiler's normal function dispatch
+                    self._alias = "numpy"
+                elif node.module:
+                    self._existing_imports.add(node.module)
+
+    # ── Pass 2: AST node rewrites ────────────────────────────────────
+
+    def _is_np(self, node: ast.expr) -> bool:
+        """Check if *node* is a Name node matching the numpy alias."""
+        return isinstance(node, ast.Name) and node.id == self._alias
+
+    def visit_Call(self, node: ast.Call) -> ast.AST:
+        """Rewrite numpy function calls to stdlib equivalents.
+
+        Handles three patterns:
+        - ``np.random.<func>(...)`` -> ``random.<func>(...)``
+        - ``np.<func>(...)`` -> ``math.<func>(...)`` or builtin
+        - ``np.<unsupported>(...)`` -> raise TranspileError
+        """
+        self.generic_visit(node)  # recurse into child nodes first
+
+        func = node.func
+
+        # np.random.random() / np.random.normal() / np.random.uniform()
+        if (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Attribute)
+            and func.value.attr == "random"
+            and self._is_np(func.value.value)
+            and func.attr in self.RANDOM_REWRITES
+        ):
+            node.func = ast.Attribute(
+                value=ast.Name(id="random", ctx=ast.Load()),
+                attr=self.RANDOM_REWRITES[func.attr],
+                ctx=ast.Load(),
+            )
+            return node
+
+        # np.linalg.*, np.fft.* — entire submodules unsupported
+        if (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Attribute)
+            and self._is_np(func.value.value)
+            and func.value.attr in self._UNSUPPORTED_SUBMODULES
+        ):
+            raise TranspileError(
+                f"`np.{func.value.attr}.{func.attr}()` is not supported. "
+                f"The `numpy.{func.value.attr}` submodule has no EmojiASM equivalent.",
+                getattr(node, "lineno", 0),
+            )
+
+        # np.sqrt(x), np.sin(x), np.abs(x), etc.
+        if (
+            isinstance(func, ast.Attribute)
+            and self._is_np(func.value)
+            and func.attr in self.FUNC_REWRITES
+        ):
+            module, fname = self.FUNC_REWRITES[func.attr]
+            if module is None:
+                # Builtin like abs()
+                node.func = ast.Name(id=fname, ctx=ast.Load())
+            else:
+                node.func = ast.Attribute(
+                    value=ast.Name(id=module, ctx=ast.Load()),
+                    attr=fname,
+                    ctx=ast.Load(),
+                )
+            return node
+
+        # np.<unsupported_func>() — helpful error
+        if (
+            isinstance(func, ast.Attribute)
+            and self._is_np(func.value)
+            and func.attr in self._UNSUPPORTED_FUNCS
+        ):
+            raise TranspileError(
+                f"`np.{func.attr}()` is not supported. "
+                f"{self._UNSUPPORTED_FUNCS[func.attr]}.",
+                getattr(node, "lineno", 0),
+            )
+
+        # Catch-all: any other np.<func>() not in FUNC_REWRITES
+        if (
+            isinstance(func, ast.Attribute)
+            and self._is_np(func.value)
+            and func.attr not in self.FUNC_REWRITES
+            and func.attr not in self.CONST_REWRITES
+        ):
+            raise TranspileError(
+                f"`np.{func.attr}()` is not supported. "
+                f"Only basic math functions (np.sqrt, np.sin, np.cos, np.exp, "
+                f"np.log, np.abs) and random functions (np.random.*) are "
+                f"available. Use `import math` + `import random` instead.",
+                getattr(node, "lineno", 0),
+            )
+
+        return node
+
+    def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
+        """Rewrite numpy constant references to math equivalents.
+
+        Handles ``np.pi`` -> ``math.pi``, ``np.e`` -> ``math.e``.
+        Unknown ``np.<attr>`` references raise a clear error.
+        """
+        self.generic_visit(node)
+
+        if self._is_np(node.value) and node.attr in self.CONST_REWRITES:
+            return ast.Attribute(
+                value=ast.Name(id="math", ctx=ast.Load()),
+                attr=self.CONST_REWRITES[node.attr],
+                ctx=node.ctx,
+            )
+
+        # Catch-all for unknown np.<attr> (not a known constant, function, or submodule)
+        if (
+            self._is_np(node.value)
+            and node.attr not in self.CONST_REWRITES
+            and node.attr not in self.FUNC_REWRITES
+            and node.attr not in self._UNSUPPORTED_FUNCS
+            and node.attr != "random"  # np.random is a valid submodule prefix
+            and node.attr not in self._UNSUPPORTED_SUBMODULES
+        ):
+            raise TranspileError(
+                f"`np.{node.attr}` is not supported. "
+                f"Only basic math functions (np.sqrt, np.sin, np.cos, np.exp, "
+                f"np.log, np.abs), random functions (np.random.*), and "
+                f"constants (np.pi, np.e) are available. "
+                f"Use `import math` + `import random` instead.",
+                getattr(node, "lineno", 0),
+            )
+
+        return node
+
+    # ── Pass 3: import replacement ────────────────────────────────────
+
+    def _replace_imports(self) -> None:
+        """Replace numpy import statements with ``import random`` and ``import math``.
+
+        Filters out the numpy import and injects stdlib imports that are not
+        already present in the source.
+        """
+        new_body: list[ast.stmt] = []
+        for node in self._tree.body:
+            if isinstance(node, ast.Import):
+                # Filter out numpy from multi-import statements
+                remaining = [a for a in node.names if a.name != "numpy"]
+                if remaining:
+                    node.names = remaining
+                    new_body.append(node)
+                # Add stdlib imports if not already present
+                if "random" not in self._existing_imports:
+                    new_body.append(
+                        ast.Import(names=[ast.alias(name="random")])
+                    )
+                    self._existing_imports.add("random")
+                if "math" not in self._existing_imports:
+                    new_body.append(
+                        ast.Import(names=[ast.alias(name="math")])
+                    )
+                    self._existing_imports.add("math")
+            elif isinstance(node, ast.ImportFrom) and node.module == "numpy":
+                # Drop `from numpy import ...` — functions are rewritten
+                if "random" not in self._existing_imports:
+                    new_body.append(
+                        ast.Import(names=[ast.alias(name="random")])
+                    )
+                    self._existing_imports.add("random")
+                if "math" not in self._existing_imports:
+                    new_body.append(
+                        ast.Import(names=[ast.alias(name="math")])
+                    )
+                    self._existing_imports.add("math")
+            else:
+                new_body.append(node)
+        self._tree.body = new_body
+
+
+def _rewrite_numpy(tree: ast.Module) -> ast.Module:
+    """Rewrite numpy calls in the AST to stdlib equivalents.
+
+    Thin wrapper around :class:`NumpyShim` for backward compatibility.
+    """
+    return NumpyShim(tree).apply()
+
+
 class PythonTranspiler(ast.NodeVisitor):
     """AST visitor that compiles Python to EmojiASM Program."""
 
@@ -157,10 +522,13 @@ class PythonTranspiler(ast.NodeVisitor):
         self._imports: set[str] = set()
         self._func_map: dict[str, str] = {}  # python name -> emoji name
         self._func_idx = 0
+        self._source_lines: list[str] = []
 
     def _emit(self, op: Op, arg=None, node=None):
         lineno = getattr(node, "lineno", 0) if node else 0
         src = ""
+        if self._source_lines and 0 < lineno <= len(self._source_lines):
+            src = self._source_lines[lineno - 1].strip()
         self._current_func.instructions.append(
             Instruction(op=op, arg=arg, line_num=lineno, source=src)
         )
@@ -355,6 +723,14 @@ class PythonTranspiler(ast.NodeVisitor):
                 self._emit(Op.ALLOC, cell, node=node)
             return
 
+        # Detect bare list literals (not [x] * N pattern)
+        if isinstance(node.value, ast.List):
+            raise TranspileError(
+                "List literals are not supported. "
+                "Use `arr = [0.0] * N` for fixed-size arrays.",
+                node.lineno,
+            )
+
         # Normal scalar assignment
         val_type = self._expr_type(node.value)
         self.visit(node.value)
@@ -504,7 +880,8 @@ class PythonTranspiler(ast.NodeVisitor):
             and node.iter.func.id == "range"
         ):
             raise TranspileError(
-                "Only 'for x in range(...)' loops are supported",
+                "Only `for x in range(N)` is supported. "
+                "Iterating over lists, strings, or other iterables is not available.",
                 node.lineno,
             )
 
@@ -591,20 +968,28 @@ class PythonTranspiler(ast.NodeVisitor):
         self._emit(Op.RET, node=node)
 
     def visit_Import(self, node: ast.Import):
-        allowed = {"random", "math"}
+        allowed = {"random", "math", "numpy"}
         for alias in node.names:
             if alias.name not in allowed:
                 raise TranspileError(
-                    f"Unsupported import: '{alias.name}'. Only {allowed} are supported.",
+                    f"Unsupported import: '{alias.name}'. "
+                    f"Use `import random` + `import math` instead. "
+                    f"Supported: random.random(), random.uniform(), random.gauss(), "
+                    f"math.sqrt(), math.sin(), math.cos(), math.exp(), math.log(), "
+                    f"math.pi, abs(), min(), max().",
                     node.lineno,
                 )
             self._imports.add(alias.name)
 
     def visit_ImportFrom(self, node: ast.ImportFrom):
-        allowed = {"random", "math"}
+        allowed = {"random", "math", "numpy"}
         if node.module not in allowed:
             raise TranspileError(
-                f"Unsupported import: '{node.module}'. Only {allowed} are supported.",
+                f"Unsupported import: '{node.module}'. "
+                f"Use `import random` + `import math` instead. "
+                f"Supported: random.random(), random.uniform(), random.gauss(), "
+                f"math.sqrt(), math.sin(), math.cos(), math.exp(), math.log(), "
+                f"math.pi, abs(), min(), max().",
                 node.lineno,
             )
         self._imports.add(node.module)
@@ -1095,11 +1480,28 @@ class PythonTranspiler(ast.NodeVisitor):
                 node.lineno,
             )
 
-        func_name = ast.dump(node.func)
-        raise TranspileError(
-            f"Unsupported function call: {func_name}",
-            node.lineno,
-        )
+        # Build a readable function name for the error message
+        func_name_readable = self._readable_func_name(node.func)
+        suggestion = _SUGGESTION_MAP.get(func_name_readable, "")
+        if not suggestion:
+            # Try just the base function name (e.g. "math.floor" -> look up "math.floor")
+            if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+                dotted = f"{node.func.value.id}.{node.func.attr}"
+                suggestion = _SUGGESTION_MAP.get(dotted, "")
+            # Try just the function name for builtins
+            if not suggestion and isinstance(node.func, ast.Name):
+                suggestion = _SUGGESTION_MAP.get(node.func.id, "")
+
+        msg = f"Unsupported function call: {func_name_readable}"
+        if suggestion:
+            msg += f". {suggestion}"
+        else:
+            msg += (
+                ". Supported functions: print(), abs(), min(), max(), len(), sum(), "
+                "random.random(), random.uniform(), random.gauss(), "
+                "math.sqrt(), math.sin(), math.cos(), math.exp(), math.log()"
+            )
+        raise TranspileError(msg, node.lineno)
 
     def visit_Attribute(self, node: ast.Attribute):
         # math.pi and math.e constants
@@ -1151,6 +1553,22 @@ class PythonTranspiler(ast.NodeVisitor):
         self._emit(Op.ALOAD, cell, node=node)
 
     # ── Helpers ──────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _readable_func_name(func_node: ast.expr) -> str:
+        """Build a human-readable name from a function call node."""
+        if isinstance(func_node, ast.Name):
+            return func_node.id
+        if isinstance(func_node, ast.Attribute):
+            parts = []
+            node = func_node
+            while isinstance(node, ast.Attribute):
+                parts.append(node.attr)
+                node = node.value
+            if isinstance(node, ast.Name):
+                parts.append(node.id)
+            return ".".join(reversed(parts))
+        return ast.dump(func_node)
 
     def _compile_print(self, node: ast.Call):
         """Compile a print() call."""
@@ -1228,6 +1646,135 @@ class PythonTranspiler(ast.NodeVisitor):
         # Don't raise for internal AST nodes like Load, Store, Del, etc.
 
 
+# ── Auto-parallelization detection ───────────────────────────────────────
+
+
+def _is_single_instance(tree: ast.Module) -> bool:
+    """Check if a Python AST looks like a single Monte Carlo trial.
+
+    Returns True if the program:
+    (a) imports random or numpy,
+    (b) has no for-loops with large range (>100), and
+    (c) has a top-level assignment to ``result`` or the last statement is
+        an expression.
+
+    This is a simple heuristic — false positives are harmless (the program
+    just gets run N times as-is).
+    """
+    has_random_import = False
+    has_large_loop = False
+    has_result_var = False
+    last_is_expr = False
+
+    for node in ast.walk(tree):
+        # (a) Check for random/numpy import
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in ("random", "numpy"):
+                    has_random_import = True
+        elif isinstance(node, ast.ImportFrom):
+            if node.module in ("random", "numpy"):
+                has_random_import = True
+
+        # (b) Check for large for-loops
+        if isinstance(node, ast.For):
+            if (
+                isinstance(node.iter, ast.Call)
+                and isinstance(node.iter.func, ast.Name)
+                and node.iter.func.id == "range"
+            ):
+                args = node.iter.args
+                # Check if range arg is a constant > 100
+                if len(args) >= 1:
+                    arg = args[-1] if len(args) <= 2 else args[1]
+                    if isinstance(arg, ast.Constant) and isinstance(
+                        arg.value, (int, float)
+                    ):
+                        if arg.value > 100:
+                            has_large_loop = True
+
+    # (c) Check for result variable assignment or expression as last stmt
+    if tree.body:
+        for stmt in tree.body:
+            if isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    if isinstance(target, ast.Name) and target.id == "result":
+                        has_result_var = True
+            elif isinstance(stmt, ast.AugAssign):
+                if (
+                    isinstance(stmt.target, ast.Name)
+                    and stmt.target.id == "result"
+                ):
+                    has_result_var = True
+
+        last_stmt = tree.body[-1]
+        if isinstance(last_stmt, ast.Expr):
+            last_is_expr = True
+
+    return has_random_import and not has_large_loop and (
+        has_result_var or last_is_expr
+    )
+
+
+def _ensure_result_capture(tree: ast.Module) -> ast.Module:
+    """Ensure the program's result value is printed for CPU capture.
+
+    If the last statement is ``result = expr``, appends ``print(result)``
+    so the value is available in stdout (CPU path) and also remains on
+    the stack after the PRINTLN opcode is followed by a LOAD+HALT
+    sequence.
+
+    If there is a variable named ``result`` anywhere, appends
+    ``print(result)`` at the end so the value ends up in stdout.
+
+    Returns the (possibly modified) AST with locations fixed.
+    """
+    if not tree.body:
+        return tree
+
+    has_result_var = False
+    already_prints_result = False
+
+    for stmt in tree.body:
+        # Check for assignment to 'result'
+        if isinstance(stmt, ast.Assign):
+            for target in stmt.targets:
+                if isinstance(target, ast.Name) and target.id == "result":
+                    has_result_var = True
+        elif isinstance(stmt, ast.AugAssign):
+            if (
+                isinstance(stmt.target, ast.Name)
+                and stmt.target.id == "result"
+            ):
+                has_result_var = True
+
+        # Check if there's already a print(result) call
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+            call = stmt.value
+            if (
+                isinstance(call.func, ast.Name)
+                and call.func.id == "print"
+                and len(call.args) == 1
+                and isinstance(call.args[0], ast.Name)
+                and call.args[0].id == "result"
+            ):
+                already_prints_result = True
+
+    if has_result_var and not already_prints_result:
+        # Append: print(result)
+        print_call = ast.Expr(
+            value=ast.Call(
+                func=ast.Name(id="print", ctx=ast.Load()),
+                args=[ast.Name(id="result", ctx=ast.Load())],
+                keywords=[],
+            )
+        )
+        tree.body.append(print_call)
+        ast.fix_missing_locations(tree)
+
+    return tree
+
+
 # ── Module-level API ─────────────────────────────────────────────────────
 
 def transpile(source: str) -> Program:
@@ -1249,7 +1796,10 @@ def transpile(source: str) -> Program:
             f"Python syntax error: {e.msg}", e.lineno or 0
         ) from e
 
+    tree = _rewrite_numpy(tree)
+
     compiler = PythonTranspiler()
+    compiler._source_lines = source.splitlines()
     compiler.visit_Module(tree)
     return compiler.program
 

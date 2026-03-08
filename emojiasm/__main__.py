@@ -72,6 +72,18 @@ def main():
         except TranspileError as e:
             print(str(e), file=sys.stderr)
             sys.exit(1)
+
+        if args.debug:
+            print("Source Map:", file=sys.stderr)
+            for func in program.functions.values():
+                for instr in func.instructions:
+                    if instr.source:
+                        arg_str = f" {instr.arg}" if instr.arg is not None else ""
+                        print(
+                            f"  py:{instr.line_num}: {instr.source}"
+                            f"  ->  {instr.op.name}{arg_str}",
+                            file=sys.stderr,
+                        )
     else:
         if args.file is None:
             ap.error("the following arguments are required: file (or use --repl)")

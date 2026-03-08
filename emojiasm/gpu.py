@@ -7,7 +7,6 @@ kernels via ``mx.fast.metal_kernel()``.
 
 from __future__ import annotations
 
-import math
 import re
 import time
 from functools import lru_cache
@@ -16,6 +15,7 @@ from pathlib import Path
 from .bytecode import OP_MAP, compile_to_bytecode, gpu_tier, GpuProgram, _build_string_table
 from .opcodes import Op
 from .parser import Program
+from .stats import compute_stats
 
 
 # ── Constants ────────────────────────────────────────────────────────────
@@ -293,22 +293,13 @@ def _get_kernel():
 def _stats(values: list[float]) -> dict:
     """Compute summary statistics from a list of float values.
 
-    Returns dict with mean, std, min, max, count.  Returns zeros when
-    *values* is empty.
-    """
-    if not values:
-        return {"mean": 0.0, "std": 0.0, "min": 0.0, "max": 0.0, "count": 0}
+    Delegates to the unified ``emojiasm.stats.compute_stats`` module.
+    Kept as a module-level function for backward compatibility.
 
-    n = len(values)
-    mean = sum(values) / n
-    variance = sum((x - mean) ** 2 for x in values) / n
-    return {
-        "mean": mean,
-        "std": math.sqrt(variance),
-        "min": min(values),
-        "max": max(values),
-        "count": n,
-    }
+    Returns dict with mean, std, min, max, count, median.  Returns zeros
+    when *values* is empty.
+    """
+    return compute_stats(values, histogram_bins=0)
 
 
 # ── Output reconstruction ────────────────────────────────────────────────
