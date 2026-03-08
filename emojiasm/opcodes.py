@@ -50,6 +50,10 @@ class Op(IntEnum):
     ABS = auto()
     MIN = auto()
     MAX = auto()
+    ALLOC = auto()
+    ALOAD = auto()
+    ASTORE = auto()
+    ALEN = auto()
 
 
 # Emoji -> Opcode mapping
@@ -105,6 +109,12 @@ EMOJI_TO_OP = {
     "⬇": Op.MIN,
     "⬆️": Op.MAX,
     "⬆": Op.MAX,
+    "🗃️": Op.ALLOC,
+    "🗃": Op.ALLOC,
+    "📖": Op.ALOAD,
+    "✏️": Op.ASTORE,
+    "✏": Op.ASTORE,
+    "🧮": Op.ALEN,
 }
 
 # Reverse mapping for disassembly
@@ -122,4 +132,5 @@ DIRECTIVE_IMPORT = "📦"
 OPS_WITH_ARG = {
     Op.PUSH, Op.JMP, Op.JZ, Op.JNZ,
     Op.CALL, Op.STORE, Op.LOAD, Op.PRINTS,
+    Op.ALLOC, Op.ALOAD, Op.ASTORE, Op.ALEN,
 }
