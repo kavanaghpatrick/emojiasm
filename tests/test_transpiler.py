@@ -838,3 +838,53 @@ class TestAutoParallelization:
         assert "count" in stats
         # Mean of boolean (0 or 1) should be between 0 and 1
         assert 0.0 <= stats["mean"] <= 1.0
+
+
+# ── Error message suggestions ───────────────────────────────────────────
+
+
+class TestErrorMessages:
+    def test_error_list_literal_suggestion(self):
+        """List literal error suggests fixed-size arrays."""
+        with pytest.raises(TranspileError, match=r"\[0\.0\] \* N"):
+            transpile("x = [1,2,3]")
+
+    def test_error_non_range_for(self):
+        """Non-range for loop error mentions range()."""
+        with pytest.raises(TranspileError, match="range"):
+            transpile("for x in items:\n    pass")
+
+    def test_error_unsupported_import(self):
+        """Unsupported import error suggests random + math."""
+        with pytest.raises(TranspileError, match="random.*math|math.*random"):
+            transpile("import os")
+
+
+# ── Source map tests ─────────────────────────────────────────────────────
+
+
+class TestSourceMap:
+    def test_source_map_simple(self):
+        """Transpiled program has instructions with populated source field."""
+        p = transpile("x = 42\nprint(x)")
+        instrs = p.functions["🏠"].instructions
+        sources = [i.source for i in instrs if i.source]
+        assert len(sources) > 0
+
+    def test_source_map_correct_line(self):
+        """First instruction's source should be 'x = 42'."""
+        p = transpile("x = 42\nprint(x)")
+        first = p.functions["🏠"].instructions[0]
+        assert first.source == "x = 42"
+
+    def test_source_map_multiline(self):
+        """Multi-line program has correct source for each line's instructions."""
+        src = "x = 42\ny = 10\nprint(x + y)"
+        p = transpile(src)
+        instrs = p.functions["🏠"].instructions
+
+        # Collect unique source lines from instructions
+        source_set = {i.source for i in instrs if i.source}
+        assert "x = 42" in source_set
+        assert "y = 10" in source_set
+        assert "print(x + y)" in source_set

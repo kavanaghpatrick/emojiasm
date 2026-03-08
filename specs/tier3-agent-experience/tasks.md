@@ -118,7 +118,7 @@ After POC validated, clean up code.
   - **Commit**: `test(transpiler): add auto-parallelization tests`
   - _Requirements: AC-1.1 through AC-1.4_
 
-- [ ] 3.4 Unit tests for error messages and source maps
+- [x] 3.4 Unit tests for error messages and source maps
   - **Do**: Add tests to `tests/test_transpiler.py`. Test: list literal error suggestion, non-range for error, unsupported import error, source map population for simple program, multi-line source maps.
   - **Files**: `tests/test_transpiler.py`
   - **Done when**: 6+ test cases covering error suggestions and source maps
