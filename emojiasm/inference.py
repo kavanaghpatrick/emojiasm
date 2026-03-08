@@ -10,6 +10,8 @@ import json
 import time
 from typing import Any
 
+from .stats import compute_stats
+
 
 class EmojiASMTool:
     """LLM tool that executes EmojiASM programs on GPU.
@@ -159,7 +161,7 @@ class EmojiASMTool:
             )
 
             # Compute stats
-            stats = self._compute_stats(numeric_results)
+            stats = compute_stats(numeric_results, histogram_bins=0)
 
             return {
                 "success": ok_count == n,
@@ -189,22 +191,12 @@ class EmojiASMTool:
 
     @staticmethod
     def _compute_stats(values: list[float]) -> dict:
-        """Compute summary statistics from a list of float values."""
-        import math
+        """Compute summary statistics from a list of float values.
 
-        if not values:
-            return {"mean": 0.0, "std": 0.0, "min": 0.0, "max": 0.0, "count": 0}
-
-        n = len(values)
-        mean = sum(values) / n
-        variance = sum((x - mean) ** 2 for x in values) / n
-        return {
-            "mean": mean,
-            "std": math.sqrt(variance),
-            "min": min(values),
-            "max": max(values),
-            "count": n,
-        }
+        Delegates to the unified ``emojiasm.stats.compute_stats`` module.
+        Kept as a static method for backward compatibility.
+        """
+        return compute_stats(values, histogram_bins=0)
 
     def execute_batch(self, sources: list[str], n_each: int = 1) -> list[dict]:
         """Execute multiple programs, returning results for each."""

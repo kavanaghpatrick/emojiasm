@@ -21,7 +21,7 @@ Focus: Get each feature working end-to-end. Skip edge cases, accept minimal impl
   - _Requirements: FR-3, FR-4, FR-5_
   - _Design: Component C_
 
-- [ ] 1.2 Wire unified stats into inference.py and gpu.py
+- [x] 1.2 Wire unified stats into inference.py and gpu.py
   - **Do**: Replace `EmojiASMTool._compute_stats()` in `inference.py` with import from `emojiasm.stats.compute_stats`. Replace `_stats()` in `gpu.py` with import from `emojiasm.stats.compute_stats`. Ensure both callers pass `histogram_bins=0` to skip histogram when not needed (backward compat).
   - **Files**: `emojiasm/inference.py`, `emojiasm/gpu.py`
   - **Done when**: All existing tests pass with unified stats
