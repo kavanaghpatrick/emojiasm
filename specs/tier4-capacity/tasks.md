@@ -89,7 +89,7 @@ Focus: Change all constants and expand pools. Verify existing tests still pass.
 
 ## Phase 3: Testing
 
-- [ ] 3.1 Test expanded variable pool limits
+- [x] 3.1 Test expanded variable pool limits
   - **Do**: Add test in `tests/test_transpiler.py`:
     1. `test_many_variables`: Transpile+run a program that uses 100+ unique variables with assignments and reads
     2. `test_variable_pool_size`: Assert `len(EMOJI_POOL) >= 200`
@@ -100,7 +100,7 @@ Focus: Change all constants and expand pools. Verify existing tests still pass.
   - **Commit**: `test(transpiler): add tests for expanded variable pool`
   - _Requirements: AC-1.1, AC-1.2, AC-1.3_
 
-- [ ] 3.2 Test expanded function pool and GPU kernel limits
+- [x] 3.2 Test expanded function pool and GPU kernel limits
   - **Do**: Add tests:
     1. In `tests/test_transpiler.py`: `test_many_functions` -- transpile+run a program with 30+ `def` statements
     2. In `tests/test_transpiler.py`: `test_function_pool_size` -- assert `len(FUNC_EMOJI_POOL) >= 50`

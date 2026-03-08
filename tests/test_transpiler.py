@@ -1,7 +1,10 @@
 """Tests for the Python-to-EmojiASM transpiler."""
 
 import pytest
-from emojiasm.transpiler import transpile, transpile_to_source, TranspileError
+from emojiasm.transpiler import (
+    transpile, transpile_to_source, TranspileError,
+    EMOJI_POOL, FUNC_EMOJI_POOL,
+)
 from emojiasm.vm import VM
 
 
@@ -888,3 +891,38 @@ class TestSourceMap:
         assert "x = 42" in source_set
         assert "y = 10" in source_set
         assert "print(x + y)" in source_set
+
+
+# ── Expanded pool limits ─────────────────────────────────────────────────
+
+
+class TestVariablePool:
+    def test_variable_pool_size(self):
+        """EMOJI_POOL must have at least 200 entries."""
+        assert len(EMOJI_POOL) >= 200
+
+    def test_variable_pool_no_duplicates(self):
+        """All entries in EMOJI_POOL must be unique."""
+        assert len(set(EMOJI_POOL)) == len(EMOJI_POOL)
+
+    def test_many_variables(self):
+        """Transpile+run a program using 100+ unique variables."""
+        # Generate: v0 = 0\nv1 = 1\n...\nv99 = 99\nprint(v0 + v99)
+        lines = [f"v{i} = {i}" for i in range(100)]
+        lines.append("print(v0 + v99)")
+        src = "\n".join(lines)
+        assert run_py(src).strip() == "99"
+
+
+class TestFunctionPool:
+    def test_function_pool_size(self):
+        """FUNC_EMOJI_POOL must have at least 50 entries."""
+        assert len(FUNC_EMOJI_POOL) >= 50
+
+    def test_many_functions(self):
+        """Transpile+run a program with 30+ def statements."""
+        # Generate: def f0(): return 0\ndef f1(): return 1\n...\ndef f29(): return 29\nprint(f29())
+        lines = [f"def f{i}():\n    return {i}" for i in range(30)]
+        lines.append("print(f29())")
+        src = "\n".join(lines)
+        assert run_py(src).strip() == "29"

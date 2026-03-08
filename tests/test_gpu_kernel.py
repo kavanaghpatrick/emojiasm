@@ -430,3 +430,20 @@ class TestMathOpcodeValidation:
                 f"Mismatch for {gpu_name}: GPU=0x{GPU_OPCODES[gpu_name]:02X} "
                 f"vs bytecode=0x{OP_MAP[op]:02X}"
             )
+
+
+# ── Expanded capacity limits ─────────────────────────────────────────────
+
+
+class TestCapacityLimits:
+    """Verify GPU kernel capacity constants match expanded limits."""
+
+    def test_memory_cells_128(self):
+        """Kernel source must have NUM_MEMORY_CELLS = 128."""
+        src = get_kernel_source()
+        assert re.search(r"NUM_MEMORY_CELLS\s*=\s*128", src) is not None
+
+    def test_call_stack_depth_32(self):
+        """Kernel source must have CALL_STACK_DEPTH = 32."""
+        src = get_kernel_source()
+        assert re.search(r"CALL_STACK_DEPTH\s*=\s*32", src) is not None
