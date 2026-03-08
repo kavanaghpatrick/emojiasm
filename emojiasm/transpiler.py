@@ -577,6 +577,67 @@ class PythonTranspiler(ast.NodeVisitor):
             self._emit(Op.RANDOM, node=node)
             return
 
+        # random.uniform(a, b) -> a + (b - a) * random()
+        if (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "random"
+            and node.func.attr == "uniform"
+        ):
+            if "random" not in self._imports:
+                raise TranspileError(
+                    "random module not imported. Add 'import random'.",
+                    node.lineno,
+                )
+            if len(node.args) != 2:
+                raise TranspileError(
+                    "random.uniform() takes exactly 2 arguments",
+                    node.lineno,
+                )
+            # Inline: a + (b - a) * random()
+            self.visit(node.args[1])       # b
+            self.visit(node.args[0])       # a
+            self._emit(Op.SUB, node=node)  # b - a
+            self._emit(Op.RANDOM, node=node)  # random float [0, 1)
+            self._emit(Op.MUL, node=node)  # (b - a) * random
+            self.visit(node.args[0])       # a
+            self._emit(Op.ADD, node=node)  # a + (b - a) * random
+            return
+
+        # random.gauss(mu, sigma) -> Box-Muller transform
+        if (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "random"
+            and node.func.attr == "gauss"
+        ):
+            if "random" not in self._imports:
+                raise TranspileError(
+                    "random module not imported. Add 'import random'.",
+                    node.lineno,
+                )
+            if len(node.args) != 2:
+                raise TranspileError(
+                    "random.gauss() takes exactly 2 arguments",
+                    node.lineno,
+                )
+            # Box-Muller: mu + sigma * sqrt(-2 * log(u1)) * cos(2 * pi * u2)
+            self._emit(Op.RANDOM, node=node)      # u1
+            self._emit(Op.LOG, node=node)          # log(u1)
+            self._emit(Op.PUSH, -2.0, node=node)   # -2.0
+            self._emit(Op.MUL, node=node)          # -2 * log(u1)
+            self._emit(Op.SQRT, node=node)         # sqrt(-2 * log(u1))
+            self._emit(Op.RANDOM, node=node)       # u2
+            self._emit(Op.PUSH, 6.283185307179586, node=node)  # 2*pi
+            self._emit(Op.MUL, node=node)          # 2*pi*u2
+            self._emit(Op.COS, node=node)          # cos(2*pi*u2)
+            self._emit(Op.MUL, node=node)          # z = sqrt(...) * cos(...)
+            self.visit(node.args[1])               # sigma
+            self._emit(Op.MUL, node=node)          # sigma * z
+            self.visit(node.args[0])               # mu
+            self._emit(Op.ADD, node=node)          # mu + sigma * z
+            return
+
         # random() from "from random import random"
         if (
             isinstance(node.func, ast.Name)

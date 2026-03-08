@@ -57,7 +57,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
   - _Requirements: FR-18_
   - _Design: Component 7f_
 
-- [ ] 1.6 Add transpiler support for random.uniform and random.gauss
+- [x] 1.6 Add transpiler support for random.uniform and random.gauss
   - **Do**: In `visit_Call`, add handlers for `random.uniform(a, b)` and `random.gauss(mu, sigma)`. uniform: inline as `a + (b-a) * random()` — visit args[0], visit args[1], visit args[0] again, SUB, RANDOM, MUL, ADD. gauss: Box-Muller inline — RANDOM, LOG, PUSH -2.0, MUL, SQRT, RANDOM, PUSH 2*pi, MUL, COS, MUL, then visit sigma, MUL, visit mu, ADD. Both require `"random" in self._imports`.
   - **Files**: `emojiasm/transpiler.py`
   - **Done when**: `random.uniform(1, 10)` transpiles and outputs a value in [1, 10)
