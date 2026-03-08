@@ -69,6 +69,12 @@ class EmojiASMTool:
     def execute_python(self, source: str, n: int = 1) -> dict:
         """Transpile Python source and execute as EmojiASM.
 
+        When ``n > 1``, auto-parallelization is attempted: if the source
+        looks like a single Monte Carlo trial (imports random, no large
+        loops, assigns to ``result``), a ``print(result)`` is appended
+        so each parallel instance captures its result.  The GPU/CPU
+        execution pipeline then runs the program N times independently.
+
         Args:
             source: Python source code (subset: arithmetic, loops, random)
             n: Number of parallel instances (capped at max_instances)
@@ -80,8 +86,26 @@ class EmojiASMTool:
         n = min(max(n, 1), self.max_instances)
 
         try:
-            from .transpiler import transpile
-            program = transpile(source)
+            import ast as _ast
+            from .transpiler import (
+                transpile,
+                _is_single_instance,
+                _ensure_result_capture,
+            )
+
+            # Auto-parallelization: detect single-instance programs and
+            # ensure result capture so each parallel run returns a value.
+            effective_source = source
+            if n > 1:
+                try:
+                    tree = _ast.parse(source)
+                    if _is_single_instance(tree):
+                        tree = _ensure_result_capture(tree)
+                        effective_source = _ast.unparse(tree)
+                except SyntaxError:
+                    pass  # fall through to transpile which will report error
+
+            program = transpile(effective_source)
         except Exception as exc:
             elapsed_ms = (time.perf_counter() - t0) * 1000
             return {
@@ -137,28 +161,43 @@ class EmojiASMTool:
             return self._execute_cpu(program, n, tier, t0)
 
     def _execute_cpu(self, program: Any, n: int, tier: int, t0: float) -> dict:
-        """Execute on CPU via agent mode."""
+        """Execute on CPU via VM with thread-level parallelism."""
         try:
-            from .agent import run_agent_mode
-            agent_result = run_agent_mode(
-                program, filename="<inference>", runs=n, max_steps=self.max_steps
-            )
+            from .vm import VM, VMError
+            from concurrent.futures import ThreadPoolExecutor
+            import io
+            from contextlib import redirect_stdout
+
+            def _run_one(instance_id: int) -> dict:
+                """Run a single VM instance, capturing output."""
+                try:
+                    buf = io.StringIO()
+                    vm = VM(program)
+                    vm.max_steps = self.max_steps
+                    with redirect_stdout(buf):
+                        vm.run()
+                    return {"status": "ok", "output": buf.getvalue()}
+                except (VMError, Exception) as e:
+                    return {"status": "error", "output": None, "error": str(e)}
+
+            if n == 1:
+                results = [_run_one(0)]
+            else:
+                with ThreadPoolExecutor(max_workers=min(n, 16)) as pool:
+                    results = list(pool.map(_run_one, range(n)))
+
             elapsed_ms = (time.perf_counter() - t0) * 1000
 
-            # Extract numeric results from agent output
+            # Extract numeric results from output
             numeric_results: list[float] = []
-            for r in agent_result.get("results", []):
+            for r in results:
                 if r.get("status") == "ok" and r.get("output"):
                     try:
                         numeric_results.append(float(r["output"].strip()))
                     except (ValueError, TypeError):
                         pass
 
-            ok_count = sum(
-                1
-                for r in agent_result.get("results", [])
-                if r.get("status") == "ok"
-            )
+            ok_count = sum(1 for r in results if r.get("status") == "ok")
 
             # Compute stats
             stats = compute_stats(numeric_results, histogram_bins=0)

@@ -1371,6 +1371,135 @@ class PythonTranspiler(ast.NodeVisitor):
         # Don't raise for internal AST nodes like Load, Store, Del, etc.
 
 
+# ── Auto-parallelization detection ───────────────────────────────────────
+
+
+def _is_single_instance(tree: ast.Module) -> bool:
+    """Check if a Python AST looks like a single Monte Carlo trial.
+
+    Returns True if the program:
+    (a) imports random or numpy,
+    (b) has no for-loops with large range (>100), and
+    (c) has a top-level assignment to ``result`` or the last statement is
+        an expression.
+
+    This is a simple heuristic — false positives are harmless (the program
+    just gets run N times as-is).
+    """
+    has_random_import = False
+    has_large_loop = False
+    has_result_var = False
+    last_is_expr = False
+
+    for node in ast.walk(tree):
+        # (a) Check for random/numpy import
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in ("random", "numpy"):
+                    has_random_import = True
+        elif isinstance(node, ast.ImportFrom):
+            if node.module in ("random", "numpy"):
+                has_random_import = True
+
+        # (b) Check for large for-loops
+        if isinstance(node, ast.For):
+            if (
+                isinstance(node.iter, ast.Call)
+                and isinstance(node.iter.func, ast.Name)
+                and node.iter.func.id == "range"
+            ):
+                args = node.iter.args
+                # Check if range arg is a constant > 100
+                if len(args) >= 1:
+                    arg = args[-1] if len(args) <= 2 else args[1]
+                    if isinstance(arg, ast.Constant) and isinstance(
+                        arg.value, (int, float)
+                    ):
+                        if arg.value > 100:
+                            has_large_loop = True
+
+    # (c) Check for result variable assignment or expression as last stmt
+    if tree.body:
+        for stmt in tree.body:
+            if isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    if isinstance(target, ast.Name) and target.id == "result":
+                        has_result_var = True
+            elif isinstance(stmt, ast.AugAssign):
+                if (
+                    isinstance(stmt.target, ast.Name)
+                    and stmt.target.id == "result"
+                ):
+                    has_result_var = True
+
+        last_stmt = tree.body[-1]
+        if isinstance(last_stmt, ast.Expr):
+            last_is_expr = True
+
+    return has_random_import and not has_large_loop and (
+        has_result_var or last_is_expr
+    )
+
+
+def _ensure_result_capture(tree: ast.Module) -> ast.Module:
+    """Ensure the program's result value is printed for CPU capture.
+
+    If the last statement is ``result = expr``, appends ``print(result)``
+    so the value is available in stdout (CPU path) and also remains on
+    the stack after the PRINTLN opcode is followed by a LOAD+HALT
+    sequence.
+
+    If there is a variable named ``result`` anywhere, appends
+    ``print(result)`` at the end so the value ends up in stdout.
+
+    Returns the (possibly modified) AST with locations fixed.
+    """
+    if not tree.body:
+        return tree
+
+    has_result_var = False
+    already_prints_result = False
+
+    for stmt in tree.body:
+        # Check for assignment to 'result'
+        if isinstance(stmt, ast.Assign):
+            for target in stmt.targets:
+                if isinstance(target, ast.Name) and target.id == "result":
+                    has_result_var = True
+        elif isinstance(stmt, ast.AugAssign):
+            if (
+                isinstance(stmt.target, ast.Name)
+                and stmt.target.id == "result"
+            ):
+                has_result_var = True
+
+        # Check if there's already a print(result) call
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+            call = stmt.value
+            if (
+                isinstance(call.func, ast.Name)
+                and call.func.id == "print"
+                and len(call.args) == 1
+                and isinstance(call.args[0], ast.Name)
+                and call.args[0].id == "result"
+            ):
+                already_prints_result = True
+
+    if has_result_var and not already_prints_result:
+        # Append: print(result)
+        print_call = ast.Expr(
+            value=ast.Call(
+                func=ast.Name(id="print", ctx=ast.Load()),
+                args=[ast.Name(id="result", ctx=ast.Load())],
+                keywords=[],
+            )
+        )
+        tree.body.append(print_call)
+        ast.fix_missing_locations(tree)
+
+    return tree
+
+
 # ── Module-level API ─────────────────────────────────────────────────────
 
 def transpile(source: str) -> Program:

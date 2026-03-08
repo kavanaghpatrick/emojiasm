@@ -39,7 +39,7 @@ Focus: Get each feature working end-to-end. Skip edge cases, accept minimal impl
   - _Requirements: FR-6, FR-7_
   - _Design: Component A_
 
-- [ ] 1.4 Add auto-parallelization detection and wrapping
+- [x] 1.4 Add auto-parallelization detection and wrapping
   - **Do**: Add `_is_single_instance(tree: ast.Module) -> bool` function that checks: (a) imports random/numpy, (b) no for-loops with range literal > 100, (c) has top-level assignment to `result` or last statement is expression. Add `_ensure_result_capture(source: str) -> str` that appends `result` variable load before HALT if pattern detected. Modify `execute_python()` in `inference.py` to call auto-parallelizer when `n > 1`. The key insight: EmojiASM GPU instances already return top-of-stack at HALT — just ensure the Python source ends with the result value assigned to a variable and loaded before HALT.
   - **Files**: `emojiasm/transpiler.py`, `emojiasm/inference.py`
   - **Done when**: `execute_python("import random\nx = random.random()\ny = random.random()\nresult = x*x + y*y <= 1.0", n=100)` returns results array with 100 values
