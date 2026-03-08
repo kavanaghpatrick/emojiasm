@@ -149,7 +149,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
 
 ## Phase 4: Quality Gates
 
-- [ ] 4.1 Full regression test suite
+- [x] 4.1 Full regression test suite
   - **Do**: Run complete test suite including all existing and new tests. Verify all 448+ existing tests still pass. Run type checking if available.
   - **Verify**: `pytest --tb=short -q`
   - **Done when**: All tests pass, zero failures
