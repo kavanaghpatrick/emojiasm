@@ -131,7 +131,7 @@ After POC validated, extend to all backends.
 
 ## Phase 3: Testing
 
-- [ ] 3.1 Comprehensive VM array tests
+- [x] 3.1 Comprehensive VM array tests
   - **Do**: Add tests for: multi-element arrays, store/load round-trip, ALEN correctness, overwrite existing elements, multiple arrays, array in function calls, array with loop (for i in range: arr[i] = i*i), sum() and len() builtins, constant folding verification (instruction count), type inference (check coercion skipped).
   - **Files**: `tests/test_emojiasm.py`
   - **Done when**: Full coverage of array operations via raw EmojiASM
