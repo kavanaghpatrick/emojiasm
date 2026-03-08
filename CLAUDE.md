@@ -22,19 +22,23 @@ emojiasm --disasm examples/functions.emoji
 emojiasm --gpu examples/monte_carlo_pi.emoji
 emojiasm --gpu --gpu-instances 10000 examples/monte_carlo_pi.emoji
 
+# Python transpiler
+emojiasm --from-python examples_py/monte_carlo_pi.py       # transpile + run
+emojiasm --transpile examples_py/fibonacci.py               # emit EmojiASM source
+emojiasm --from-python script.py --gpu --gpu-instances 1000 # transpile + GPU
+
 # Run tests
 pytest
 
 # Run a single test
 pytest tests/test_emojiasm.py::test_function_call
+pytest tests/test_transpiler.py -v
 pytest tests/test_bytecode.py -v
-pytest tests/test_gpu_kernel.py -v
-pytest tests/test_mlx_backend.py -v
 ```
 
 ## Architecture
 
-EmojiASM has two execution paths: CPU (Python VM) and GPU (Metal via MLX).
+EmojiASM has two execution paths: CPU (Python VM) and GPU (Metal via MLX). A Python transpiler enables writing Python and executing as EmojiASM.
 
 ### CPU Pipeline
 
@@ -79,8 +83,18 @@ EmojiASM has two execution paths: CPU (Python VM) and GPU (Metal via MLX).
 - `gpu_available()` — safe MLX/Metal check, `run_auto()` — auto GPU/CPU routing.
 
 **8. Inference Integration (`emojiasm/inference.py`)** — LLM-facing API.
-- `EmojiASMTool` — execute(), validate(), as_tool_spec(), handle_tool_call().
+- `EmojiASMTool` — execute(), execute_python(), validate(), as_tool_spec(), handle_tool_call().
 - Auto-routes GPU when n>=256, MLX available, and tier<=2; CPU otherwise.
+
+### Python Transpiler
+
+**9. Transpiler (`emojiasm/transpiler.py`)** — Compiles Python → `Program` via `ast.NodeVisitor`.
+- `transpile(source) → Program` — main entry point, produces same `Program` as `parse()`.
+- `transpile_to_source(source) → str` — transpile + disassemble to EmojiASM source text.
+- `PythonTranspiler` — AST visitor with `VarManager` (variables → emoji memory cells) and `LabelGenerator` (control flow labels).
+- Supported: int/float/bool, arithmetic, comparisons, `and`/`or`/`not`, `if`/`elif`/`else`, `while`, `for x in range()`, `break`/`continue`, `def`/`return` (including recursion), `print()`, `random.random()`.
+- Key design: saves/restores local variables around function calls (memory cells are global, so recursive calls would clobber parent's locals without this). Excludes `__retval__` temp cell from save set.
+- CLI: `--from-python FILE` (transpile + run), `--transpile FILE` (emit EmojiASM source).
 
 ### Opcode Definitions
 
@@ -106,6 +120,6 @@ Human-readable language reference: `docs/REFERENCE.md`
 
 ## Testing Pattern
 
-607 tests across multiple files. CPU tests in `tests/test_emojiasm.py` use an inline `run()` helper that calls `parse()` then `VM.run()` and returns `output_buffer`. Assert against `"".join(out)` or `.strip()` it.
+715 tests across multiple files. CPU tests in `tests/test_emojiasm.py` use an inline `run()` helper that calls `parse()` then `VM.run()` and returns `output_buffer`. Assert against `"".join(out)` or `.strip()` it. Transpiler tests in `tests/test_transpiler.py` use `run_py()` helper that calls `transpile()` then `VM.run()`.
 
 GPU tests use `@requires_mlx` decorator (skip if MLX not installed). Bytecode/kernel tests validate opcode maps, source structure, and encoding without needing a GPU.
