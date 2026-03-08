@@ -21,7 +21,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
   - _Requirements: FR-1 through FR-9_
   - _Design: Component 1_
 
-- [ ] 1.2 Add VM execution for all 9 new opcodes
+- [x] 1.2 Add VM execution for all 9 new opcodes
   - **Do**: Add `import math` at top of vm.py (after existing imports). Add 9 new match/case arms after the `case Op.RANDOM:` block. Binary ops (POW, MIN, MAX): `b, a = self._pop(), self._pop()` then push result. Unary ops (SQRT, SIN, COS, EXP, LOG, ABS): `a = self._pop()` then push result. For SQRT: wrap in try/except ValueError for negative input, raise VMError. For LOG: wrap in try/except for domain errors. ABS uses builtin `abs()`, not `math.fabs()` to preserve int type.
   - **Files**: `emojiasm/vm.py`
   - **Done when**: All 9 opcodes execute correctly in the VM

@@ -1,5 +1,6 @@
 """Stack-based virtual machine for EmojiASM."""
 
+import math
 import random
 import sys
 from .opcodes import Op
@@ -284,6 +285,48 @@ class VM:
 
                 case Op.RANDOM:
                     self._push(random.random())
+
+                case Op.POW:
+                    b, a = self._pop(), self._pop()
+                    self._push(a ** b)
+
+                case Op.SQRT:
+                    a = self._pop()
+                    try:
+                        self._push(math.sqrt(a))
+                    except ValueError:
+                        raise VMError(f"SQRT of negative number: {a}", ip, source=inst.source, func_name=func_name)
+
+                case Op.SIN:
+                    a = self._pop()
+                    self._push(math.sin(a))
+
+                case Op.COS:
+                    a = self._pop()
+                    self._push(math.cos(a))
+
+                case Op.EXP:
+                    a = self._pop()
+                    self._push(math.exp(a))
+
+                case Op.LOG:
+                    a = self._pop()
+                    try:
+                        self._push(math.log(a))
+                    except ValueError:
+                        raise VMError(f"LOG domain error: {a}", ip, source=inst.source, func_name=func_name)
+
+                case Op.ABS:
+                    a = self._pop()
+                    self._push(abs(a))
+
+                case Op.MIN:
+                    b, a = self._pop(), self._pop()
+                    self._push(min(a, b))
+
+                case Op.MAX:
+                    b, a = self._pop(), self._pop()
+                    self._push(max(a, b))
 
                 case _:
                     raise VMError(f"Unknown opcode: {op}", ip, source=inst.source, func_name=func_name)
