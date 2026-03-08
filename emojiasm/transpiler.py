@@ -178,69 +178,213 @@ class LabelGenerator:
 
 # ── Numpy shim AST rewriter ──────────────────────────────────────────────
 
-# Mapping of np.<func>(x) -> module.func or builtin
-_NP_FUNC_REWRITES: dict[str, tuple[str | None, str]] = {
-    # (module_or_None, function_name)
-    "sqrt": ("math", "sqrt"),
-    "sin": ("math", "sin"),
-    "cos": ("math", "cos"),
-    "exp": ("math", "exp"),
-    "log": ("math", "log"),
-    "abs": (None, "abs"),  # builtin
-}
 
-# Mapping of np.random.<func> -> random.<func>
-_NP_RANDOM_REWRITES: dict[str, str] = {
-    "random": "random",
-    "normal": "gauss",
-    "uniform": "uniform",
-}
+class NumpyShim(ast.NodeTransformer):
+    """Rewrite numpy API calls in a Python AST to stdlib equivalents.
 
-# Mapping of np.<constant> -> math.<constant>
-_NP_CONST_REWRITES: dict[str, str] = {
-    "pi": "pi",
-    "e": "e",
-}
+    EmojiASM does not support numpy, but many LLM-generated programs use it
+    for simple math and random operations.  This transformer detects
+    ``import numpy as np`` (or ``import numpy``, or any alias) and rewrites
+    the supported subset of numpy calls to their ``random`` / ``math`` /
+    builtin equivalents so the transpiler can handle them.
 
+    **Supported rewrites:**
 
-class _NumpyRewriter(ast.NodeTransformer):
-    """Rewrite numpy calls to stdlib equivalents."""
+    =====================  ============================
+    numpy call             stdlib replacement
+    =====================  ============================
+    np.random.random()     random.random()
+    np.random.normal(m,s)  random.gauss(m,s)
+    np.random.uniform(a,b) random.uniform(a,b)
+    np.sqrt(x)             math.sqrt(x)
+    np.sin(x)              math.sin(x)
+    np.cos(x)              math.cos(x)
+    np.exp(x)              math.exp(x)
+    np.log(x)              math.log(x)
+    np.abs(x)              abs(x)
+    np.pi                  math.pi
+    np.e                   math.e
+    =====================  ============================
 
-    def __init__(self, np_alias: str):
-        self._alias = np_alias
+    **Unsupported (raises TranspileError):**
+
+    - ``from numpy import *`` — ambiguous scope
+    - ``np.array()``, ``np.zeros()``, ``np.ones()`` — use ``[0.0] * N``
+    - ``np.linalg.*`` — not available
+
+    Usage::
+
+        shim = NumpyShim(tree)
+        tree = shim.apply()
+    """
+
+    # ── Mapping tables ────────────────────────────────────────────────
+
+    # np.<func>(x) -> (module | None, function_name)
+    # None means builtin (no module prefix).
+    FUNC_REWRITES: dict[str, tuple[str | None, str]] = {
+        "sqrt": ("math", "sqrt"),
+        "sin": ("math", "sin"),
+        "cos": ("math", "cos"),
+        "exp": ("math", "exp"),
+        "log": ("math", "log"),
+        "abs": (None, "abs"),  # builtin
+    }
+
+    # np.random.<func> -> random.<func>
+    RANDOM_REWRITES: dict[str, str] = {
+        "random": "random",
+        "normal": "gauss",
+        "uniform": "uniform",
+    }
+
+    # np.<constant> -> math.<constant>
+    CONST_REWRITES: dict[str, str] = {
+        "pi": "pi",
+        "e": "e",
+    }
+
+    # np.<unsupported>() — raise helpful errors
+    _UNSUPPORTED_FUNCS: dict[str, str] = {
+        "array": "Use `arr = [0.0] * N` for fixed-size arrays",
+        "zeros": "Use `arr = [0.0] * N` for zero-initialized arrays",
+        "ones": "Use `arr = [1.0] * N` for one-initialized arrays",
+        "arange": "Use `for i in range(N)` instead of np.arange()",
+        "linspace": "Use a for-loop with manual step calculation",
+        "mean": "Use `sum(values) / len(values)` instead",
+        "sum": "Use builtin `sum()` or a for-loop accumulator",
+    }
+
+    # np.linalg.* and np.fft.* — entire submodules unsupported
+    _UNSUPPORTED_SUBMODULES: set[str] = {"linalg", "fft", "ma", "polynomial"}
+
+    def __init__(self, tree: ast.Module) -> None:
+        """Initialize the shim with a parsed AST.
+
+        Args:
+            tree: The parsed AST module to transform.
+
+        Raises:
+            TranspileError: If ``from numpy import *`` is detected.
+        """
+        self._tree = tree
+        self._alias: str | None = None
+        self._existing_imports: set[str] = set()
+
+    def apply(self) -> ast.Module:
+        """Run all three passes and return the transformed AST.
+
+        Returns:
+            The rewritten AST with numpy calls replaced by stdlib calls.
+            If no numpy import is found, returns the tree unchanged.
+        """
+        self._scan_imports()
+        if self._alias is None:
+            return self._tree
+
+        # Rewrite AST nodes (visit_Call / visit_Attribute)
+        self._tree = self.visit(self._tree)
+
+        # Replace numpy import with random + math
+        self._replace_imports()
+
+        ast.fix_missing_locations(self._tree)
+        return self._tree
+
+    # ── Pass 1: import scanning ───────────────────────────────────────
+
+    def _scan_imports(self) -> None:
+        """Scan top-level imports to find the numpy alias and existing imports.
+
+        Detects all import styles:
+        - ``import numpy`` -> alias = "numpy"
+        - ``import numpy as np`` -> alias = "np"
+        - ``import numpy as npy`` -> alias = "npy" (any alias)
+        - ``from numpy import *`` -> raises TranspileError
+
+        Raises:
+            TranspileError: If ``from numpy import *`` is used.
+        """
+        for node in ast.iter_child_nodes(self._tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "numpy":
+                        self._alias = alias.asname or "numpy"
+                    else:
+                        self._existing_imports.add(alias.name)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module == "numpy":
+                    # Detect `from numpy import *`
+                    for alias in node.names:
+                        if alias.name == "*":
+                            raise TranspileError(
+                                "`from numpy import *` is not supported. "
+                                "Use `import numpy as np` and call functions "
+                                "as `np.sqrt()`, `np.random.random()`, etc.",
+                                getattr(node, "lineno", 0),
+                            )
+                    # `from numpy import sqrt, pi` — treat as alias "numpy"
+                    # so that bare names like sqrt() get handled by the
+                    # transpiler's normal function dispatch
+                    self._alias = "numpy"
+                elif node.module:
+                    self._existing_imports.add(node.module)
+
+    # ── Pass 2: AST node rewrites ────────────────────────────────────
+
     def _is_np(self, node: ast.expr) -> bool:
-        """Check if node is the numpy alias name."""
+        """Check if *node* is a Name node matching the numpy alias."""
         return isinstance(node, ast.Name) and node.id == self._alias
 
-    def visit_Call(self, node: ast.Call):
-        self.generic_visit(node)  # recurse first
+    def visit_Call(self, node: ast.Call) -> ast.AST:
+        """Rewrite numpy function calls to stdlib equivalents.
+
+        Handles three patterns:
+        - ``np.random.<func>(...)`` -> ``random.<func>(...)``
+        - ``np.<func>(...)`` -> ``math.<func>(...)`` or builtin
+        - ``np.<unsupported>(...)`` -> raise TranspileError
+        """
+        self.generic_visit(node)  # recurse into child nodes first
 
         func = node.func
+
         # np.random.random() / np.random.normal() / np.random.uniform()
         if (
             isinstance(func, ast.Attribute)
             and isinstance(func.value, ast.Attribute)
             and func.value.attr == "random"
             and self._is_np(func.value.value)
-            and func.attr in _NP_RANDOM_REWRITES
+            and func.attr in self.RANDOM_REWRITES
         ):
-            new_func = ast.Attribute(
+            node.func = ast.Attribute(
                 value=ast.Name(id="random", ctx=ast.Load()),
-                attr=_NP_RANDOM_REWRITES[func.attr],
+                attr=self.RANDOM_REWRITES[func.attr],
                 ctx=ast.Load(),
             )
-            node.func = new_func
             return node
 
-        # np.sqrt(x), np.sin(x), etc.
+        # np.linalg.*, np.fft.* — entire submodules unsupported
+        if (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Attribute)
+            and self._is_np(func.value.value)
+            and func.value.attr in self._UNSUPPORTED_SUBMODULES
+        ):
+            raise TranspileError(
+                f"`np.{func.value.attr}.{func.attr}()` is not supported. "
+                f"The `numpy.{func.value.attr}` submodule has no EmojiASM equivalent.",
+                getattr(node, "lineno", 0),
+            )
+
+        # np.sqrt(x), np.sin(x), np.abs(x), etc.
         if (
             isinstance(func, ast.Attribute)
             and self._is_np(func.value)
-            and func.attr in _NP_FUNC_REWRITES
+            and func.attr in self.FUNC_REWRITES
         ):
-            module, fname = _NP_FUNC_REWRITES[func.attr]
+            module, fname = self.FUNC_REWRITES[func.attr]
             if module is None:
-                # builtin like abs()
+                # Builtin like abs()
                 node.func = ast.Name(id=fname, ctx=ast.Load())
             else:
                 node.func = ast.Attribute(
@@ -250,73 +394,85 @@ class _NumpyRewriter(ast.NodeTransformer):
                 )
             return node
 
+        # np.<unsupported_func>() — helpful error
+        if (
+            isinstance(func, ast.Attribute)
+            and self._is_np(func.value)
+            and func.attr in self._UNSUPPORTED_FUNCS
+        ):
+            raise TranspileError(
+                f"`np.{func.attr}()` is not supported. "
+                f"{self._UNSUPPORTED_FUNCS[func.attr]}.",
+                getattr(node, "lineno", 0),
+            )
+
         return node
 
-    def visit_Attribute(self, node: ast.Attribute):
+    def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
+        """Rewrite numpy constant references to math equivalents.
+
+        Handles ``np.pi`` -> ``math.pi``, ``np.e`` -> ``math.e``.
+        """
         self.generic_visit(node)
 
-        # np.pi -> math.pi, np.e -> math.e
-        if self._is_np(node.value) and node.attr in _NP_CONST_REWRITES:
+        if self._is_np(node.value) and node.attr in self.CONST_REWRITES:
             return ast.Attribute(
                 value=ast.Name(id="math", ctx=ast.Load()),
-                attr=_NP_CONST_REWRITES[node.attr],
+                attr=self.CONST_REWRITES[node.attr],
                 ctx=node.ctx,
             )
         return node
+
+    # ── Pass 3: import replacement ────────────────────────────────────
+
+    def _replace_imports(self) -> None:
+        """Replace numpy import statements with ``import random`` and ``import math``.
+
+        Filters out the numpy import and injects stdlib imports that are not
+        already present in the source.
+        """
+        new_body: list[ast.stmt] = []
+        for node in self._tree.body:
+            if isinstance(node, ast.Import):
+                # Filter out numpy from multi-import statements
+                remaining = [a for a in node.names if a.name != "numpy"]
+                if remaining:
+                    node.names = remaining
+                    new_body.append(node)
+                # Add stdlib imports if not already present
+                if "random" not in self._existing_imports:
+                    new_body.append(
+                        ast.Import(names=[ast.alias(name="random")])
+                    )
+                    self._existing_imports.add("random")
+                if "math" not in self._existing_imports:
+                    new_body.append(
+                        ast.Import(names=[ast.alias(name="math")])
+                    )
+                    self._existing_imports.add("math")
+            elif isinstance(node, ast.ImportFrom) and node.module == "numpy":
+                # Drop `from numpy import ...` — functions are rewritten
+                if "random" not in self._existing_imports:
+                    new_body.append(
+                        ast.Import(names=[ast.alias(name="random")])
+                    )
+                    self._existing_imports.add("random")
+                if "math" not in self._existing_imports:
+                    new_body.append(
+                        ast.Import(names=[ast.alias(name="math")])
+                    )
+                    self._existing_imports.add("math")
+            else:
+                new_body.append(node)
+        self._tree.body = new_body
 
 
 def _rewrite_numpy(tree: ast.Module) -> ast.Module:
     """Rewrite numpy calls in the AST to stdlib equivalents.
 
-    Detects ``import numpy as np`` (or ``import numpy``) and rewrites
-    numpy API calls to their random/math/builtin equivalents. The numpy
-    import node is replaced with ``import random`` and ``import math``
-    (if not already present).
+    Thin wrapper around :class:`NumpyShim` for backward compatibility.
     """
-    np_alias: str | None = None
-    existing_imports: set[str] = set()
-
-    # Pass 1: find numpy import and existing imports
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name == "numpy":
-                    np_alias = alias.asname or "numpy"
-                else:
-                    existing_imports.add(alias.name)
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                existing_imports.add(node.module)
-
-    if np_alias is None:
-        return tree  # no numpy import found
-
-    # Pass 2: rewrite numpy calls
-    rewriter = _NumpyRewriter(np_alias)
-    tree = rewriter.visit(tree)
-
-    # Pass 3: replace numpy import with random + math imports
-    new_body: list[ast.stmt] = []
-    for node in tree.body:
-        if isinstance(node, ast.Import):
-            # Filter out numpy from the import
-            remaining = [a for a in node.names if a.name != "numpy"]
-            if remaining:
-                node.names = remaining
-                new_body.append(node)
-            # Add random and math imports (if not already present)
-            if "random" not in existing_imports:
-                new_body.append(ast.Import(names=[ast.alias(name="random")]))
-                existing_imports.add("random")
-            if "math" not in existing_imports:
-                new_body.append(ast.Import(names=[ast.alias(name="math")]))
-                existing_imports.add("math")
-        else:
-            new_body.append(node)
-
-    tree.body = new_body
-    ast.fix_missing_locations(tree)
-    return tree
+    return NumpyShim(tree).apply()
 
 
 class PythonTranspiler(ast.NodeVisitor):

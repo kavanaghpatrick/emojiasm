@@ -76,7 +76,7 @@ Focus: Get each feature working end-to-end. Skip edge cases, accept minimal impl
 
 After POC validated, clean up code.
 
-- [ ] 2.1 Extract numpy shim into clean AST transformer class
+- [x] 2.1 Extract numpy shim into clean AST transformer class
   - **Do**: Refactor `_rewrite_numpy()` into a proper `NumpyShim(ast.NodeTransformer)` class with clear mapping tables. Add docstrings and type hints. Handle edge cases: `from numpy import *`, `import numpy`, `np = numpy`.
   - **Files**: `emojiasm/transpiler.py`
   - **Done when**: Shim handles all import variants, code is well-documented
