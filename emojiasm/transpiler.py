@@ -101,6 +101,7 @@ class VarManager:
         self._vars: dict[str, str] = {}  # name -> emoji
         self._next_idx = 0
         self._array_vars: set[str] = set()  # names that are arrays
+        self._types: dict[str, str] = {}  # name -> "int", "float", or "unknown"
 
     def assign(self, name: str) -> str:
         if name not in self._vars:
@@ -123,6 +124,14 @@ class VarManager:
 
     def is_array(self, name: str) -> bool:
         return name in self._array_vars
+
+    def set_type(self, name: str, typ: str) -> None:
+        """Record the inferred type of a variable: 'int', 'float', or 'unknown'."""
+        self._types[name] = typ
+
+    def get_type(self, name: str) -> str:
+        """Return inferred type of a variable, defaulting to 'unknown'."""
+        return self._types.get(name, "unknown")
 
 
 class LabelGenerator:
@@ -170,6 +179,77 @@ class PythonTranspiler(ast.NodeVisitor):
         self._func_map[name] = emoji
         self._func_idx += 1
         return emoji
+
+    # ── Type inference ────────────────────────────────────────────────────
+
+    # Math functions that always produce float results
+    _FLOAT_PRODUCING_FUNCS = {"sqrt", "sin", "cos", "exp", "log"}
+
+    def _expr_type(self, node: ast.expr) -> str:
+        """Infer the type of an expression: 'int', 'float', or 'unknown'."""
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, float):
+                return "float"
+            if isinstance(node.value, int) and not isinstance(node.value, bool):
+                return "int"
+            return "unknown"
+
+        if isinstance(node, ast.Name):
+            return self._vars.get_type(node.id)
+
+        if isinstance(node, ast.BinOp):
+            lt = self._expr_type(node.left)
+            rt = self._expr_type(node.right)
+            # True division always produces float
+            if isinstance(node.op, ast.Div):
+                return "float"
+            # If either operand is float, result is float
+            if lt == "float" or rt == "float":
+                return "float"
+            # If both are int, result is int (for +, -, *, //, %, **)
+            if lt == "int" and rt == "int":
+                return "int"
+            return "unknown"
+
+        if isinstance(node, ast.UnaryOp):
+            return self._expr_type(node.operand)
+
+        if isinstance(node, ast.Call):
+            # math.sqrt, math.sin, etc. always produce float
+            if (
+                isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "math"
+                and node.func.attr in self._FLOAT_PRODUCING_FUNCS
+            ):
+                return "float"
+            # random.random(), random.uniform(), random.gauss() -> float
+            if (
+                isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "random"
+                and node.func.attr in ("random", "uniform", "gauss")
+            ):
+                return "float"
+            # from random import random
+            if (
+                isinstance(node.func, ast.Name)
+                and node.func.id == "random"
+                and "_from_random_random" in self._imports
+            ):
+                return "float"
+            return "unknown"
+
+        if isinstance(node, ast.Attribute):
+            # math.pi, math.e -> float
+            if (
+                isinstance(node.value, ast.Name)
+                and node.value.id == "math"
+                and node.attr in ("pi", "e")
+            ):
+                return "float"
+
+        return "unknown"
 
     # ── Module ───────────────────────────────────────────────────────────
 
@@ -276,6 +356,7 @@ class PythonTranspiler(ast.NodeVisitor):
             return
 
         # Normal scalar assignment
+        val_type = self._expr_type(node.value)
         self.visit(node.value)
         for i, target in enumerate(targets):
             if not isinstance(target, ast.Name):
@@ -284,6 +365,7 @@ class PythonTranspiler(ast.NodeVisitor):
                     node.lineno,
                 )
             cell = self._vars.assign(target.id)
+            self._vars.set_type(target.id, val_type)
             if i < len(targets) - 1:
                 self._emit(Op.DUP, node=node)
             self._emit(Op.STORE, cell, node=node)
@@ -344,9 +426,10 @@ class PythonTranspiler(ast.NodeVisitor):
         self._emit(Op.LOAD, cell, node=node)
 
         if isinstance(node.op, ast.Div):
-            # True division: coerce to float
-            self._emit(Op.PUSH, 1.0, node=node)
-            self._emit(Op.MUL, node=node)
+            # True division: coerce to float (skip if var is already float)
+            if self._vars.get_type(node.target.id) != "float":
+                self._emit(Op.PUSH, 1.0, node=node)
+                self._emit(Op.MUL, node=node)
             self.visit(node.value)
             self._emit(Op.DIV, node=node)
         else:
@@ -360,6 +443,15 @@ class PythonTranspiler(ast.NodeVisitor):
             self._emit(op, node=node)
 
         self._emit(Op.STORE, cell, node=node)
+
+        # Update type tracking for augmented assignment
+        if isinstance(node.op, ast.Div):
+            self._vars.set_type(node.target.id, "float")
+        else:
+            cur_type = self._vars.get_type(node.target.id)
+            val_type = self._expr_type(node.value)
+            if cur_type == "float" or val_type == "float":
+                self._vars.set_type(node.target.id, "float")
 
     def visit_If(self, node: ast.If):
         if not node.orelse:
@@ -635,13 +727,14 @@ class PythonTranspiler(ast.NodeVisitor):
             if isinstance(node.left, ast.Constant) and node.left.value == 0:
                 self._emit(Op.PUSH, 0, node=node)
                 return
-        # x / 1 -> x (true division still needs float coercion)
+        # x / 1 -> x (true division still needs float coercion unless already float)
         if isinstance(node.op, ast.Div):
             if isinstance(node.right, ast.Constant) and node.right.value == 1:
                 self.visit(node.left)
-                # Still coerce to float for true division
-                self._emit(Op.PUSH, 1.0, node=node)
-                self._emit(Op.MUL, node=node)
+                # Skip coercion if left is already known float
+                if self._expr_type(node.left) != "float":
+                    self._emit(Op.PUSH, 1.0, node=node)
+                    self._emit(Op.MUL, node=node)
                 return
         # x // 1 -> x
         if isinstance(node.op, ast.FloorDiv):
@@ -651,10 +744,11 @@ class PythonTranspiler(ast.NodeVisitor):
 
         # ── Normal code generation ──────────────────────────────────────
         if isinstance(node.op, ast.Div):
-            # True division: coerce left to float
+            # True division: coerce left to float (skip if already float)
             self.visit(node.left)
-            self._emit(Op.PUSH, 1.0, node=node)
-            self._emit(Op.MUL, node=node)
+            if self._expr_type(node.left) != "float":
+                self._emit(Op.PUSH, 1.0, node=node)
+                self._emit(Op.MUL, node=node)
             self.visit(node.right)
             self._emit(Op.DIV, node=node)
             return

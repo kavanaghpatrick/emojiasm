@@ -66,7 +66,7 @@ Focus: Get arrays working end-to-end in VM + transpiler. Skip GPU/compiler, acce
   - _Requirements: FR-13, FR-14_
   - _Design: Component I_
 
-- [ ] 1.7 Transpiler: type inference for division coercion
+- [x] 1.7 Transpiler: type inference for division coercion
   - **Do**: Add type tracking to VarManager: `_types: dict[str, str]` mapping var name to `"int"`, `"float"`, or `"unknown"`. Update on assignment (Constant int -> "int", Constant float -> "float", BinOp with any float operand -> "float", etc.). In `visit_BinOp` for `ast.Div`: check if left operand is a Name with known float type. If yes, skip `PUSH 1.0, MUL` coercion.
   - **Files**: `emojiasm/transpiler.py`
   - **Done when**: `x = 1.0; y = x / 2` skips float coercion
