@@ -100,6 +100,7 @@ class VarManager:
     def __init__(self):
         self._vars: dict[str, str] = {}  # name -> emoji
         self._next_idx = 0
+        self._array_vars: set[str] = set()  # names that are arrays
 
     def assign(self, name: str) -> str:
         if name not in self._vars:
@@ -116,6 +117,12 @@ class VarManager:
 
     def is_assigned(self, name: str) -> bool:
         return name in self._vars
+
+    def mark_array(self, name: str) -> None:
+        self._array_vars.add(name)
+
+    def is_array(self, name: str) -> bool:
+        return name in self._array_vars
 
 
 class LabelGenerator:
@@ -201,9 +208,75 @@ class PythonTranspiler(ast.NodeVisitor):
     def visit_Expr(self, node: ast.Expr):
         self.visit(node.value)
 
+    def _is_array_alloc(self, node: ast.expr):
+        """Detect [fill] * N or N * [fill] pattern for array allocation.
+
+        Returns (fill_value, size) if matched, else None.
+        """
+        if not isinstance(node, ast.BinOp) or not isinstance(node.op, ast.Mult):
+            return None
+        # [fill] * N
+        if (
+            isinstance(node.left, ast.List)
+            and len(node.left.elts) == 1
+            and isinstance(node.left.elts[0], ast.Constant)
+            and isinstance(node.right, ast.Constant)
+            and isinstance(node.right.value, (int, float))
+        ):
+            return (node.left.elts[0].value, node.right.value)
+        # N * [fill]
+        if (
+            isinstance(node.right, ast.List)
+            and len(node.right.elts) == 1
+            and isinstance(node.right.elts[0], ast.Constant)
+            and isinstance(node.left, ast.Constant)
+            and isinstance(node.left.value, (int, float))
+        ):
+            return (node.right.elts[0].value, node.left.value)
+        return None
+
     def visit_Assign(self, node: ast.Assign):
-        self.visit(node.value)
         targets = node.targets
+
+        # Single target: check for subscript assignment (arr[i] = val)
+        if len(targets) == 1 and isinstance(targets[0], ast.Subscript):
+            sub = targets[0]
+            if not isinstance(sub.value, ast.Name):
+                raise TranspileError(
+                    "Only simple variable subscript assignment supported",
+                    node.lineno,
+                )
+            var_name = sub.value.id
+            cell = self._vars.lookup(var_name)
+            if cell is None or not self._vars.is_array(var_name):
+                raise TranspileError(
+                    f"Variable '{var_name}' is not a known array",
+                    node.lineno,
+                )
+            # Stack order for ASTORE: index first, then value on top
+            self.visit(sub.slice)   # push index
+            self.visit(node.value)  # push value
+            self._emit(Op.ASTORE, cell, node=node)
+            return
+
+        # Check for array allocation pattern: arr = [0.0] * N
+        alloc = self._is_array_alloc(node.value)
+        if alloc is not None:
+            _fill, size = alloc
+            for i, target in enumerate(targets):
+                if not isinstance(target, ast.Name):
+                    raise TranspileError(
+                        "Only simple variable assignment supported for array allocation",
+                        node.lineno,
+                    )
+                cell = self._vars.assign(target.id)
+                self._vars.mark_array(target.id)
+                self._emit(Op.PUSH, int(size), node=node)
+                self._emit(Op.ALLOC, cell, node=node)
+            return
+
+        # Normal scalar assignment
+        self.visit(node.value)
         for i, target in enumerate(targets):
             if not isinstance(target, ast.Name):
                 raise TranspileError(
@@ -216,6 +289,47 @@ class PythonTranspiler(ast.NodeVisitor):
             self._emit(Op.STORE, cell, node=node)
 
     def visit_AugAssign(self, node: ast.AugAssign):
+        # Subscript augmented assignment: arr[i] += val
+        if isinstance(node.target, ast.Subscript):
+            sub = node.target
+            if not isinstance(sub.value, ast.Name):
+                raise TranspileError(
+                    "Only simple variable subscript augmented assignment supported",
+                    node.lineno,
+                )
+            var_name = sub.value.id
+            cell = self._vars.lookup(var_name)
+            if cell is None or not self._vars.is_array(var_name):
+                raise TranspileError(
+                    f"Variable '{var_name}' is not a known array",
+                    node.lineno,
+                )
+            # Stack: push index, DUP (save index), ALOAD (load current), visit value, OP
+            # Then need: index, new_value for ASTORE
+            self.visit(sub.slice)            # push index
+            self._emit(Op.DUP, node=node)    # save index copy
+            self._emit(Op.ALOAD, cell, node=node)  # load arr[i] (consumes one index copy)
+
+            if isinstance(node.op, ast.Div):
+                self._emit(Op.PUSH, 1.0, node=node)
+                self._emit(Op.MUL, node=node)
+                self.visit(node.value)
+                self._emit(Op.DIV, node=node)
+            else:
+                op = _AUGOP_MAP.get(type(node.op))
+                if op is None:
+                    raise TranspileError(
+                        f"Unsupported augmented assignment operator: {type(node.op).__name__}",
+                        node.lineno,
+                    )
+                self.visit(node.value)
+                self._emit(op, node=node)
+
+            # Stack now: [saved_index, new_value]
+            # ASTORE expects: index first, value on top — which is what we have
+            self._emit(Op.ASTORE, cell, node=node)
+            return
+
         if not isinstance(node.target, ast.Name):
             raise TranspileError(
                 "Only simple variable augmented assignment supported",
@@ -781,6 +895,23 @@ class PythonTranspiler(ast.NodeVisitor):
         self._set_label(else_label)
         self.visit(node.orelse)
         self._set_label(end_label)
+
+    def visit_Subscript(self, node: ast.Subscript):
+        """Array read: arr[i] -> push index, ALOAD cell."""
+        if not isinstance(node.value, ast.Name):
+            raise TranspileError(
+                "Only simple variable subscript access supported",
+                getattr(node, "lineno", 0),
+            )
+        var_name = node.value.id
+        cell = self._vars.lookup(var_name)
+        if cell is None or not self._vars.is_array(var_name):
+            raise TranspileError(
+                f"Variable '{var_name}' is not a known array",
+                getattr(node, "lineno", 0),
+            )
+        self.visit(node.slice)  # push index
+        self._emit(Op.ALOAD, cell, node=node)
 
     # ── Helpers ──────────────────────────────────────────────────────────
 

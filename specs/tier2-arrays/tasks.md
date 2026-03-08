@@ -39,7 +39,7 @@ Focus: Get arrays working end-to-end in VM + transpiler. Skip GPU/compiler, acce
   - _Requirements: AC-1.1 through AC-1.5_
   - _Design: Component B_
 
-- [ ] 1.4 Transpiler: array allocation and access
+- [x] 1.4 Transpiler: array allocation and access
   - **Do**: In transpiler.py: (1) Extend VarManager to track array vs scalar variables (add `_array_vars: set[str]`). (2) Handle `visit_Assign` for `ast.BinOp(ast.List, ast.Mult, ast.Constant)` pattern -- detect `[0.0] * N`, emit PUSH N + ALLOC cell, mark var as array. (3) Add `visit_Subscript` for read access: emit visit(index), ALOAD cell. (4) Modify `visit_Assign` to detect `ast.Subscript` as target: emit visit(index), visit(value), ASTORE cell. (5) Handle `visit_AugAssign` with Subscript target: emit visit(index), DUP, ALOAD cell, visit(value), OP, ASTORE cell.
   - **Files**: `emojiasm/transpiler.py`
   - **Done when**: Python array programs transpile and run correctly
