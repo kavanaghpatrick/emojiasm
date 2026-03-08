@@ -478,3 +478,105 @@ class TestEdgeCases:
     def test_complex_expression(self):
         src = "x = 10\ny = 3\nprint((x + y) * (x - y) // 2)"
         assert run_py(src).strip() == "45"
+
+
+# ── Power operator ───────────────────────────────────────────────────────
+
+
+class TestPower:
+    def test_power_int(self):
+        assert run_py("print(2 ** 10)").strip() == "1024"
+
+    def test_power_float(self):
+        assert run_py("print(4 ** 0.5)").strip() == "2.0"
+
+    def test_power_augassign(self):
+        assert run_py("x = 3\nx **= 2\nprint(x)").strip() == "9"
+
+
+# ── Math functions ───────────────────────────────────────────────────────
+
+
+class TestMathFunctions:
+    def test_sqrt(self):
+        assert run_py("import math\nprint(math.sqrt(16))").strip() == "4.0"
+
+    def test_sin_zero(self):
+        assert run_py("import math\nprint(math.sin(0))").strip() == "0.0"
+
+    def test_cos_zero(self):
+        assert run_py("import math\nprint(math.cos(0))").strip() == "1.0"
+
+    def test_exp_zero(self):
+        assert run_py("import math\nprint(math.exp(0))").strip() == "1.0"
+
+    def test_log_one(self):
+        assert run_py("import math\nprint(math.log(1))").strip() == "0.0"
+
+    def test_abs_negative_int(self):
+        assert run_py("print(abs(-5))").strip() == "5"
+
+    def test_abs_negative_float(self):
+        assert run_py("print(abs(-3.14))").strip() == "3.14"
+
+    def test_min(self):
+        assert run_py("print(min(3, 7))").strip() == "3"
+
+    def test_max(self):
+        assert run_py("print(max(3, 7))").strip() == "7"
+
+
+# ── Math constants ───────────────────────────────────────────────────────
+
+
+class TestMathConstants:
+    def test_pi(self):
+        out = run_py("import math\nx = math.pi\nprint(x)").strip()
+        assert out.startswith("3.14159")
+
+    def test_e(self):
+        out = run_py("import math\nx = math.e\nprint(x)").strip()
+        assert out.startswith("2.71828")
+
+    def test_pi_in_expression(self):
+        out = run_py("import math\nprint(2 * math.pi)").strip()
+        val = float(out)
+        assert abs(val - 6.283185307179586) < 0.001
+
+
+# ── Chained comparisons ─────────────────────────────────────────────────
+
+
+class TestChainedComparisons:
+    def test_ascending_true(self):
+        assert run_py("print(1 < 2 < 3)").strip() == "1"
+
+    def test_ascending_false(self):
+        assert run_py("print(1 < 3 < 2)").strip() == "0"
+
+    def test_triple_chain(self):
+        assert run_py("print(1 < 2 < 3 < 4)").strip() == "1"
+
+    def test_mixed_ops(self):
+        assert run_py("print(1 <= 2 < 3)").strip() == "1"
+
+    def test_in_if(self):
+        src = "x = 5\nif 1 < x < 10:\n    print(1)\nelse:\n    print(0)"
+        assert run_py(src).strip() == "1"
+
+
+# ── Random distributions ────────────────────────────────────────────────
+
+
+class TestRandomDistributions:
+    def test_uniform_in_range(self):
+        src = "import random\nx = random.uniform(1, 10)\nprint(x)"
+        val = float(run_py(src).strip())
+        assert 1.0 <= val < 10.0
+
+    def test_gauss_returns_float(self):
+        src = "import random\nx = random.gauss(0, 1)\nprint(x)"
+        out = run_py(src).strip()
+        # Should produce a float (contains a dot)
+        val = float(out)
+        assert isinstance(val, float)

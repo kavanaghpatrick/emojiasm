@@ -66,7 +66,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
   - _Requirements: FR-16, FR-17_
   - _Design: Component 7e_
 
-- [ ] 1.7 Add transpiler tests for all new features
+- [x] 1.7 Add transpiler tests for all new features
   - **Do**: Add tests to `tests/test_transpiler.py` using the existing `run_py()` helper. Test classes: `TestPower` (2**10=1024, 4**0.5=2.0, x**=2 augmented assign), `TestMathFunctions` (sqrt(16)=4.0, sin(0)=0.0, cos(0)=1.0, exp(0)=1.0, log(1)=0.0, abs(-5)=5, min(3,7)=3, max(3,7)=7), `TestMathConstants` (math.pi ~= 3.14159, math.e ~= 2.71828, math.pi*2 expression), `TestChainedComparisons` (1<2<3=1, 1<3<2=0, 1<2<3<4=1, mixed ops 1<=2<3=1, in if condition), `TestRandomDistributions` (uniform in range, gauss returns float). Use approximate assertions for float comparisons.
   - **Files**: `tests/test_transpiler.py`
   - **Done when**: All new tests pass
