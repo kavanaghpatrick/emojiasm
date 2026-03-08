@@ -88,7 +88,7 @@ OPCODE_TO_OP: dict[int, Op] = {v: k for k, v in OP_MAP.items()}
 _MAX_OPERAND = (1 << 24) - 1
 
 # Maximum stack depth allowed on GPU (KB #147)
-_GPU_MAX_STACK = 128
+_GPU_MAX_STACK = 256
 
 
 # ── Output dataclass ─────────────────────────────────────────────────────

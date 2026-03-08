@@ -259,7 +259,7 @@ class TestRandomOpcode:
 
 class TestConstants:
     def test_default_stack_depth(self):
-        assert DEFAULT_STACK_DEPTH == 128
+        assert DEFAULT_STACK_DEPTH == 256
 
     def test_default_max_steps(self):
         assert DEFAULT_MAX_STEPS == 1_000_000

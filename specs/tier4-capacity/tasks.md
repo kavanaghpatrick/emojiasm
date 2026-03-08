@@ -12,7 +12,7 @@ generated: auto
 
 Focus: Change all constants and expand pools. Verify existing tests still pass.
 
-- [ ] 1.1 Increase GPU memory cells from 32 to 128
+- [x] 1.1 Increase GPU memory cells from 32 to 128
   - **Do**: In `emojiasm/metal/vm.metal`, change `constant int NUM_MEMORY_CELLS = 32;` to `constant int NUM_MEMORY_CELLS = 128;`
   - **Files**: `emojiasm/metal/vm.metal`
   - **Done when**: The constant reads 128; no other code changes needed since all usage is via `NUM_MEMORY_CELLS`
@@ -21,7 +21,7 @@ Focus: Change all constants and expand pools. Verify existing tests still pass.
   - _Requirements: FR-3_
   - _Design: Component A_
 
-- [ ] 1.2 Increase GPU call stack depth from 16 to 32
+- [x] 1.2 Increase GPU call stack depth from 16 to 32
   - **Do**: In `emojiasm/metal/vm.metal`, change `constant int CALL_STACK_DEPTH = 16;` to `constant int CALL_STACK_DEPTH = 32;`
   - **Files**: `emojiasm/metal/vm.metal`
   - **Done when**: The constant reads 32
@@ -30,7 +30,7 @@ Focus: Change all constants and expand pools. Verify existing tests still pass.
   - _Requirements: FR-4_
   - _Design: Component A_
 
-- [ ] 1.3 Increase GPU stack depth from 128 to 256
+- [x] 1.3 Increase GPU stack depth from 128 to 256
   - **Do**:
     1. In `emojiasm/gpu.py`, change `DEFAULT_STACK_DEPTH = 128` to `DEFAULT_STACK_DEPTH = 256`
     2. In `emojiasm/bytecode.py`, change `_GPU_MAX_STACK = 128` to `_GPU_MAX_STACK = 256`

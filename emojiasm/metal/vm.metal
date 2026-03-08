@@ -91,10 +91,10 @@ constant uint32_t STATUS_TIMEOUT    = 3;
 // ── Fixed-size limits ───────────────────────────────────────────────────
 
 // Call stack depth (thread-local, small enough for registers per KB #146)
-constant int CALL_STACK_DEPTH = 16;
+constant int CALL_STACK_DEPTH = 32;
 
 // Memory cells per thread (thread-local array)
-constant int NUM_MEMORY_CELLS = 32;
+constant int NUM_MEMORY_CELLS = 128;
 
 // ── Output buffer entry (Tier 2 output capture) ────────────────────────
 
