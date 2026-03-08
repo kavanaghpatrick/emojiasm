@@ -53,6 +53,7 @@ _BINOP_MAP = {
     ast.Mult: Op.MUL,
     ast.FloorDiv: Op.DIV,
     ast.Mod: Op.MOD,
+    ast.Pow: Op.POW,
 }
 
 _AUGOP_MAP = {
@@ -61,6 +62,7 @@ _AUGOP_MAP = {
     ast.Mult: Op.MUL,
     ast.FloorDiv: Op.DIV,
     ast.Mod: Op.MOD,
+    ast.Pow: Op.POW,
     ast.Div: None,  # special handling
 }
 
@@ -460,12 +462,6 @@ class PythonTranspiler(ast.NodeVisitor):
             self._emit(Op.DIV, node=node)
             return
 
-        if isinstance(node.op, ast.Pow):
-            raise TranspileError(
-                "Power operator (**) not supported. For square root, use manual iteration.",
-                node.lineno,
-            )
-
         op = _BINOP_MAP.get(type(node.op))
         if op is None:
             raise TranspileError(
@@ -559,6 +555,69 @@ class PythonTranspiler(ast.NodeVisitor):
             self._emit(Op.RANDOM, node=node)
             return
 
+        # math.* functions
+        _MATH_FUNC_MAP = {
+            "sqrt": Op.SQRT,
+            "sin": Op.SIN,
+            "cos": Op.COS,
+            "exp": Op.EXP,
+            "log": Op.LOG,
+        }
+        if (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "math"
+            and node.func.attr in _MATH_FUNC_MAP
+        ):
+            if "math" not in self._imports:
+                raise TranspileError(
+                    "math module not imported. Add 'import math'.",
+                    node.lineno,
+                )
+            if len(node.args) != 1:
+                raise TranspileError(
+                    f"math.{node.func.attr}() takes exactly 1 argument",
+                    node.lineno,
+                )
+            self.visit(node.args[0])
+            self._emit(_MATH_FUNC_MAP[node.func.attr], node=node)
+            return
+
+        # abs(x) builtin
+        if isinstance(node.func, ast.Name) and node.func.id == "abs":
+            if len(node.args) != 1:
+                raise TranspileError(
+                    "abs() takes exactly 1 argument",
+                    node.lineno,
+                )
+            self.visit(node.args[0])
+            self._emit(Op.ABS, node=node)
+            return
+
+        # min(a, b) builtin
+        if isinstance(node.func, ast.Name) and node.func.id == "min":
+            if len(node.args) != 2:
+                raise TranspileError(
+                    "min() takes exactly 2 arguments",
+                    node.lineno,
+                )
+            self.visit(node.args[0])
+            self.visit(node.args[1])
+            self._emit(Op.MIN, node=node)
+            return
+
+        # max(a, b) builtin
+        if isinstance(node.func, ast.Name) and node.func.id == "max":
+            if len(node.args) != 2:
+                raise TranspileError(
+                    "max() takes exactly 2 arguments",
+                    node.lineno,
+                )
+            self.visit(node.args[0])
+            self.visit(node.args[1])
+            self._emit(Op.MAX, node=node)
+            return
+
         # User-defined function call
         if isinstance(node.func, ast.Name) and node.func.id in self._func_map:
             emoji = self._func_map[node.func.id]
@@ -600,6 +659,22 @@ class PythonTranspiler(ast.NodeVisitor):
         )
 
     def visit_Attribute(self, node: ast.Attribute):
+        # math.pi and math.e constants
+        if (
+            isinstance(node.value, ast.Name)
+            and node.value.id == "math"
+            and node.attr in ("pi", "e")
+        ):
+            if "math" not in self._imports:
+                raise TranspileError(
+                    "math module not imported. Add 'import math'.",
+                    getattr(node, "lineno", 0),
+                )
+            if node.attr == "pi":
+                self._emit(Op.PUSH, 3.141592653589793, node=node)
+            elif node.attr == "e":
+                self._emit(Op.PUSH, 2.718281828459045, node=node)
+            return
         # Allow random.random etc. to be handled by visit_Call
         pass
 

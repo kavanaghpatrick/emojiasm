@@ -39,7 +39,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
   - _Requirements: AC-1.3, AC-2.9_
   - _Design: Component 2_
 
-- [ ] 1.4 Add transpiler support for `**` operator and math functions
+- [x] 1.4 Add transpiler support for `**` operator and math functions
   - **Do**: In `transpiler.py`: (1) Replace the `ast.Pow` error in `visit_BinOp` with `self.visit(left); self.visit(right); self._emit(Op.POW)`. Add `ast.Pow: Op.POW` to `_BINOP_MAP` and `_AUGOP_MAP`. (2) In `visit_Call`, add handler for `math.*` attribute calls (sqrt, sin, cos, exp, log) mapping to corresponding opcodes. (3) Add handler for `abs(x)` -> ABS, `min(a,b)` -> MIN, `max(a,b)` -> MAX builtins. (4) Update `visit_Attribute` to handle `math.pi` -> PUSH 3.141592653589793 and `math.e` -> PUSH 2.718281828459045. Must handle the case where math.pi/math.e appear in expressions (not just as standalone calls).
   - **Files**: `emojiasm/transpiler.py`
   - **Done when**: `transpile("import math\nprint(2 ** 10)")` produces a working program, `transpile("import math\nprint(math.sqrt(16))")` works

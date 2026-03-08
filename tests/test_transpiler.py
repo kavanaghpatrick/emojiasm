@@ -405,9 +405,10 @@ class TestErrors:
         with pytest.raises(TranspileError, match="[Cc]hained"):
             transpile("print(1 < 2 < 3)")
 
-    def test_power_operator(self):
-        with pytest.raises(TranspileError, match="[Pp]ower"):
-            transpile("print(2 ** 3)")
+    def test_power_operator_now_supported(self):
+        # ** operator is now supported via POW opcode
+        out = run_py("print(2 ** 3)")
+        assert out.strip() == "8"
 
     def test_range_too_many_args(self):
         with pytest.raises(TranspileError):
