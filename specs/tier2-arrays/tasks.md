@@ -57,7 +57,7 @@ Focus: Get arrays working end-to-end in VM + transpiler. Skip GPU/compiler, acce
   - _Requirements: FR-11, FR-12_
   - _Design: Component H_
 
-- [ ] 1.6 Transpiler: constant folding
+- [x] 1.6 Transpiler: constant folding
   - **Do**: In `visit_BinOp`: before visiting children, check if both `node.left` and `node.right` are `ast.Constant` with numeric values. If so, evaluate at compile time and emit single PUSH. Handle Add, Sub, Mult, Div, FloorDiv, Mod, Pow. Guard against division by zero (don't fold, let runtime handle). Also add identity elimination: check if one side is Constant(0) for add/sub or Constant(1) for mul/div and skip the no-op.
   - **Files**: `emojiasm/transpiler.py`
   - **Done when**: `4.0 * 3.14159` emits 1 instruction instead of 3

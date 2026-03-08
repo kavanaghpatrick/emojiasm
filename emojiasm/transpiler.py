@@ -567,6 +567,89 @@ class PythonTranspiler(ast.NodeVisitor):
         self._emit(Op.LOAD, cell, node=node)
 
     def visit_BinOp(self, node: ast.BinOp):
+        # ── Constant folding ────────────────────────────────────────────
+        # If both sides are numeric constants, evaluate at compile time.
+        if (
+            isinstance(node.left, ast.Constant)
+            and isinstance(node.right, ast.Constant)
+            and isinstance(node.left.value, (int, float))
+            and isinstance(node.right.value, (int, float))
+        ):
+            lv, rv = node.left.value, node.right.value
+            _FOLD_OPS = {
+                ast.Add: lambda a, b: a + b,
+                ast.Sub: lambda a, b: a - b,
+                ast.Mult: lambda a, b: a * b,
+                ast.Div: lambda a, b: a / b,
+                ast.FloorDiv: lambda a, b: a // b,
+                ast.Mod: lambda a, b: a % b,
+                ast.Pow: lambda a, b: a ** b,
+            }
+            fold_fn = _FOLD_OPS.get(type(node.op))
+            if fold_fn is not None:
+                # Guard: don't fold division by zero
+                if isinstance(node.op, (ast.Div, ast.FloorDiv, ast.Mod)) and rv == 0:
+                    pass  # fall through to runtime
+                else:
+                    try:
+                        result = fold_fn(lv, rv)
+                        # Guard: don't fold if result is not finite
+                        if isinstance(result, float) and (
+                            result != result  # NaN
+                            or result == float("inf")
+                            or result == float("-inf")
+                        ):
+                            pass  # fall through to runtime
+                        else:
+                            self._emit(Op.PUSH, result, node=node)
+                            return
+                    except (ArithmeticError, ValueError, OverflowError):
+                        pass  # fall through to runtime
+
+        # ── Identity elimination ────────────────────────────────────────
+        # x + 0, 0 + x -> x
+        if isinstance(node.op, ast.Add):
+            if isinstance(node.right, ast.Constant) and node.right.value == 0:
+                self.visit(node.left)
+                return
+            if isinstance(node.left, ast.Constant) and node.left.value == 0:
+                self.visit(node.right)
+                return
+        # x - 0 -> x
+        if isinstance(node.op, ast.Sub):
+            if isinstance(node.right, ast.Constant) and node.right.value == 0:
+                self.visit(node.left)
+                return
+        # x * 1, 1 * x -> x
+        if isinstance(node.op, ast.Mult):
+            if isinstance(node.right, ast.Constant) and node.right.value == 1:
+                self.visit(node.left)
+                return
+            if isinstance(node.left, ast.Constant) and node.left.value == 1:
+                self.visit(node.right)
+                return
+            # x * 0, 0 * x -> 0 (skip visiting x to avoid side effects)
+            if isinstance(node.right, ast.Constant) and node.right.value == 0:
+                self._emit(Op.PUSH, 0, node=node)
+                return
+            if isinstance(node.left, ast.Constant) and node.left.value == 0:
+                self._emit(Op.PUSH, 0, node=node)
+                return
+        # x / 1 -> x (true division still needs float coercion)
+        if isinstance(node.op, ast.Div):
+            if isinstance(node.right, ast.Constant) and node.right.value == 1:
+                self.visit(node.left)
+                # Still coerce to float for true division
+                self._emit(Op.PUSH, 1.0, node=node)
+                self._emit(Op.MUL, node=node)
+                return
+        # x // 1 -> x
+        if isinstance(node.op, ast.FloorDiv):
+            if isinstance(node.right, ast.Constant) and node.right.value == 1:
+                self.visit(node.left)
+                return
+
+        # ── Normal code generation ──────────────────────────────────────
         if isinstance(node.op, ast.Div):
             # True division: coerce left to float
             self.visit(node.left)
