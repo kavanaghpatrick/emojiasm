@@ -30,7 +30,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
   - _Requirements: FR-1 through FR-9_
   - _Design: Component 2_
 
-- [ ] 1.3 Add basic EmojiASM tests for all 9 new opcodes
+- [x] 1.3 Add basic EmojiASM tests for all 9 new opcodes
   - **Do**: Add tests to `tests/test_emojiasm.py` using the existing `run()` helper. Test each opcode: POW (`📥 2 📥 10 🔋` -> 1024), SQRT (`📥 16 🌱` -> 4.0), SIN (`📥 0 📈` -> 0.0), COS (`📥 0 📉` -> 1.0), EXP (`📥 0 🚀` -> 1.0), LOG (`📥 1 📓` -> 0.0), ABS (`📥 -5 💪` -> 5 preserving int), MIN (`📥 3 📥 7 ⬇️` -> 3), MAX (`📥 3 📥 7 ⬆️` -> 7). Also test float precision: `SQRT(2)` ~= 1.4142, `SIN(math.pi/2)` ~= 1.0.
   - **Files**: `tests/test_emojiasm.py`
   - **Done when**: All new tests pass with `pytest tests/test_emojiasm.py -v`
