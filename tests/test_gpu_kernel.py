@@ -168,6 +168,15 @@ class TestKernelOpcodeCases:
             "MUL": "OP_MUL",
             "DIV": "OP_DIV",
             "MOD": "OP_MOD",
+            "POW": "OP_POW",
+            "SQRT": "OP_SQRT",
+            "SIN": "OP_SIN",
+            "COS": "OP_COS",
+            "EXP": "OP_EXP",
+            "LOG": "OP_LOG",
+            "ABS": "OP_ABS",
+            "MIN": "OP_MIN",
+            "MAX": "OP_MAX",
             "EQ": "OP_EQ",
             "LT": "OP_LT",
             "GT": "OP_GT",
@@ -313,3 +322,111 @@ class TestKernelStructure:
         """Kernel should write TOS to results buffer."""
         src = get_kernel_source()
         assert "results[tid]" in src
+
+
+# ── Math opcode GPU kernel tests ────────────────────────────────────────
+
+_MATH_MSL_CONSTANTS = [
+    ("OP_POW", 0x15),
+    ("OP_SQRT", 0x16),
+    ("OP_SIN", 0x17),
+    ("OP_COS", 0x18),
+    ("OP_EXP", 0x19),
+    ("OP_LOG", 0x1A),
+    ("OP_ABS", 0x1B),
+    ("OP_MIN", 0x1C),
+    ("OP_MAX", 0x1D),
+]
+
+
+class TestMathOpcodeKernelConstants:
+    """Verify Metal kernel source contains all 9 new math opcode constants."""
+
+    def test_all_math_constants_defined(self):
+        """Each math opcode constant should be defined in the kernel."""
+        src = get_kernel_source()
+        for msl_name, _ in _MATH_MSL_CONSTANTS:
+            assert f"constant uint8_t {msl_name}" in src, (
+                f"Missing MSL constant definition for {msl_name}"
+            )
+
+    def test_all_math_constants_have_correct_values(self):
+        """Each math opcode constant should have the correct hex value."""
+        src = get_kernel_source()
+        for msl_name, code in _MATH_MSL_CONSTANTS:
+            pattern = rf"constant\s+uint8_t\s+{msl_name}\s*=\s*0x{code:02X}"
+            match = re.search(pattern, src, re.IGNORECASE)
+            assert match is not None, (
+                f"Constant {msl_name} not defined with value 0x{code:02X}"
+            )
+
+    def test_all_math_cases_in_switch(self):
+        """Each math opcode should have a case in the switch dispatch."""
+        src = get_kernel_source()
+        for msl_name, _ in _MATH_MSL_CONSTANTS:
+            assert f"case {msl_name}:" in src, (
+                f"Missing case {msl_name}: in switch dispatch"
+            )
+
+
+class TestMathOpcodeKernelFunctions:
+    """Verify the kernel uses correct MSL math functions."""
+
+    def test_pow_uses_msl_pow(self):
+        src = get_kernel_source()
+        assert "pow(" in src
+
+    def test_sqrt_uses_msl_sqrt(self):
+        src = get_kernel_source()
+        assert "sqrt(" in src
+
+    def test_sin_uses_msl_sin(self):
+        src = get_kernel_source()
+        assert "sin(" in src
+
+    def test_cos_uses_msl_cos(self):
+        src = get_kernel_source()
+        assert "cos(" in src
+
+    def test_exp_uses_msl_exp(self):
+        src = get_kernel_source()
+        assert "exp(" in src
+
+    def test_log_uses_msl_log(self):
+        src = get_kernel_source()
+        assert "log(" in src
+
+    def test_min_uses_msl_min(self):
+        src = get_kernel_source()
+        assert "min(" in src
+
+    def test_max_uses_msl_max(self):
+        src = get_kernel_source()
+        assert "max(" in src
+
+
+class TestMathOpcodeValidation:
+    """Verify validate_opcodes() passes with new math opcodes."""
+
+    def test_validate_opcodes_still_passes(self):
+        """validate_opcodes() should not raise with math ops added."""
+        validate_opcodes()
+
+    def test_math_ops_in_gpu_opcodes(self):
+        """All 9 math ops should be in GPU_OPCODES."""
+        math_gpu_names = ["POW", "SQRT", "SIN", "COS", "EXP", "LOG", "ABS", "MIN", "MAX"]
+        for name in math_gpu_names:
+            assert name in GPU_OPCODES, f"{name} missing from GPU_OPCODES"
+
+    def test_math_gpu_opcodes_match_bytecode(self):
+        """GPU_OPCODES values for math ops should match OP_MAP."""
+        math_ops = {
+            "POW": Op.POW, "SQRT": Op.SQRT, "SIN": Op.SIN,
+            "COS": Op.COS, "EXP": Op.EXP, "LOG": Op.LOG,
+            "ABS": Op.ABS, "MIN": Op.MIN, "MAX": Op.MAX,
+        }
+        for gpu_name, op in math_ops.items():
+            assert GPU_OPCODES[gpu_name] == OP_MAP[op], (
+                f"Mismatch for {gpu_name}: GPU=0x{GPU_OPCODES[gpu_name]:02X} "
+                f"vs bytecode=0x{OP_MAP[op]:02X}"
+            )

@@ -26,6 +26,7 @@ _PREAMBLE_NUMERIC = """\
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <math.h>
 
 /* EmojiASM AOT compiled output (numeric-only fast path) */
 
@@ -48,6 +49,7 @@ _PREAMBLE_MIXED = """\
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 
 /* EmojiASM AOT compiled output */
 
@@ -307,6 +309,60 @@ def _emit_inst(inst: Instruction, lines: list, fhex: str, mem: dict, numeric_onl
 
     elif op == Op.RANDOM:
         A('    PUSH_N((double)rand() / (double)RAND_MAX);')
+
+    elif op == Op.POW:
+        if numeric_only:
+            A('    { double b=POP(),a=POP(); PUSH_N(pow(a,b)); }')
+        else:
+            A('    { Val b=POP(),a=POP(); PUSH_N(pow(a.num,b.num)); }')
+
+    elif op == Op.SQRT:
+        if numeric_only:
+            A('    { double a=POP(); PUSH_N(sqrt(a)); }')
+        else:
+            A('    { Val a=POP(); PUSH_N(sqrt(a.num)); }')
+
+    elif op == Op.SIN:
+        if numeric_only:
+            A('    { double a=POP(); PUSH_N(sin(a)); }')
+        else:
+            A('    { Val a=POP(); PUSH_N(sin(a.num)); }')
+
+    elif op == Op.COS:
+        if numeric_only:
+            A('    { double a=POP(); PUSH_N(cos(a)); }')
+        else:
+            A('    { Val a=POP(); PUSH_N(cos(a.num)); }')
+
+    elif op == Op.EXP:
+        if numeric_only:
+            A('    { double a=POP(); PUSH_N(exp(a)); }')
+        else:
+            A('    { Val a=POP(); PUSH_N(exp(a.num)); }')
+
+    elif op == Op.LOG:
+        if numeric_only:
+            A('    { double a=POP(); PUSH_N(log(a)); }')
+        else:
+            A('    { Val a=POP(); PUSH_N(log(a.num)); }')
+
+    elif op == Op.ABS:
+        if numeric_only:
+            A('    { double a=POP(); PUSH_N(fabs(a)); }')
+        else:
+            A('    { Val a=POP(); PUSH_N(fabs(a.num)); }')
+
+    elif op == Op.MIN:
+        if numeric_only:
+            A('    { double b=POP(),a=POP(); PUSH_N(fmin(a,b)); }')
+        else:
+            A('    { Val b=POP(),a=POP(); PUSH_N(fmin(a.num,b.num)); }')
+
+    elif op == Op.MAX:
+        if numeric_only:
+            A('    { double b=POP(),a=POP(); PUSH_N(fmax(a,b)); }')
+        else:
+            A('    { Val b=POP(),a=POP(); PUSH_N(fmax(a.num,b.num)); }')
 
 
 # ── Main compiler entry point ───────────────────────────────────────────────

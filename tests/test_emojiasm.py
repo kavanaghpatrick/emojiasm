@@ -161,3 +161,67 @@ def test_deep_recursion_no_stack_overflow():
     ])
     out = run(src, max_steps=5_000_000)
     assert "".join(out).strip() == "0"
+
+
+# --- Math opcodes (Tier 1) ---
+
+
+def test_pow():
+    out = run("📥 2\n📥 10\n🔋\n🖨️\n🛑")
+    assert "".join(out).strip() == "1024"
+
+
+def test_pow_negative_exponent():
+    out = run("📥 2\n📥 -1\n🔋\n🖨️\n🛑")
+    assert "".join(out).strip() == "0.5"
+
+
+def test_sqrt():
+    out = run("📥 16\n🌱\n🖨️\n🛑")
+    assert "".join(out).strip() == "4.0"
+
+
+def test_sqrt_float():
+    out = run("📥 2\n🌱\n🖨️\n🛑")
+    val = float("".join(out).strip())
+    assert abs(val - 1.4142135623730951) < 1e-6
+
+
+def test_sin():
+    out = run("📥 0\n📈\n🖨️\n🛑")
+    assert "".join(out).strip() == "0.0"
+
+
+def test_cos():
+    out = run("📥 0\n📉\n🖨️\n🛑")
+    assert "".join(out).strip() == "1.0"
+
+
+def test_exp():
+    out = run("📥 0\n🚀\n🖨️\n🛑")
+    assert "".join(out).strip() == "1.0"
+
+
+def test_log():
+    out = run("📥 1\n📓\n🖨️\n🛑")
+    assert "".join(out).strip() == "0.0"
+
+
+def test_abs_int():
+    out = run("📥 -5\n💪\n🖨️\n🛑")
+    assert "".join(out).strip() == "5"
+
+
+def test_abs_float():
+    out = run("📥 -3.14\n💪\n🖨️\n🛑")
+    assert "".join(out).strip() == "3.14"
+
+
+def test_min():
+    out = run("📥 3\n📥 7\n⬇️\n🖨️\n🛑")
+    assert "".join(out).strip() == "3"
+
+
+def test_max():
+    out = run("📥 3\n📥 7\n⬆️\n🖨️\n🛑")
+    assert "".join(out).strip() == "7"

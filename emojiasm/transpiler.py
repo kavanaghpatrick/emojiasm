@@ -53,6 +53,7 @@ _BINOP_MAP = {
     ast.Mult: Op.MUL,
     ast.FloorDiv: Op.DIV,
     ast.Mod: Op.MOD,
+    ast.Pow: Op.POW,
 }
 
 _AUGOP_MAP = {
@@ -61,6 +62,7 @@ _AUGOP_MAP = {
     ast.Mult: Op.MUL,
     ast.FloorDiv: Op.DIV,
     ast.Mod: Op.MOD,
+    ast.Pow: Op.POW,
     ast.Div: None,  # special handling
 }
 
@@ -460,12 +462,6 @@ class PythonTranspiler(ast.NodeVisitor):
             self._emit(Op.DIV, node=node)
             return
 
-        if isinstance(node.op, ast.Pow):
-            raise TranspileError(
-                "Power operator (**) not supported. For square root, use manual iteration.",
-                node.lineno,
-            )
-
         op = _BINOP_MAP.get(type(node.op))
         if op is None:
             raise TranspileError(
@@ -493,17 +489,8 @@ class PythonTranspiler(ast.NodeVisitor):
                 node.lineno,
             )
 
-    def visit_Compare(self, node: ast.Compare):
-        if len(node.ops) > 1:
-            raise TranspileError(
-                "Chained comparisons not supported. Use 'a < b and b < c' instead.",
-                node.lineno,
-            )
-
-        self.visit(node.left)
-        self.visit(node.comparators[0])
-        cmp_op = node.ops[0]
-
+    def _emit_cmp_op(self, cmp_op, node):
+        """Emit comparison opcodes for a single comparison operator."""
         if isinstance(cmp_op, ast.Eq):
             self._emit(Op.CMP_EQ, node=node)
         elif isinstance(cmp_op, ast.NotEq):
@@ -524,6 +511,46 @@ class PythonTranspiler(ast.NodeVisitor):
                 f"Unsupported comparison: {type(cmp_op).__name__}",
                 node.lineno,
             )
+
+    def visit_Compare(self, node: ast.Compare):
+        n = len(node.ops)
+        self.visit(node.left)
+
+        for i, (cmp_op, comparator) in enumerate(
+            zip(node.ops, node.comparators)
+        ):
+            is_last = i == n - 1
+
+            self.visit(comparator)
+
+            if not is_last:
+                # Save comparator for next comparison:
+                # stack: [..., left_val, comp] -> DUP -> [..., left_val, comp, comp_copy]
+                # ROT -> [..., comp, comp_copy, left_val]
+                # SWAP -> [..., comp, left_val, comp_copy]
+                # Now CMP will consume left_val and comp_copy correctly
+                self._emit(Op.DUP, node=node)
+                self._emit(Op.ROT, node=node)
+                self._emit(Op.SWAP, node=node)
+
+            self._emit_cmp_op(cmp_op, node)
+
+            if i > 0 and not is_last:
+                # Combine with previous result: stack is [prev_result, saved_comp, cmp_result]
+                # ROT -> [saved_comp, cmp_result, prev_result]
+                # AND -> [saved_comp, combined]
+                # SWAP -> [combined, saved_comp]
+                self._emit(Op.ROT, node=node)
+                self._emit(Op.AND, node=node)
+                self._emit(Op.SWAP, node=node)
+            elif i > 0 and is_last:
+                # Last comparison, combine with accumulated result
+                # stack: [accumulated, cmp_result] -> AND -> [final]
+                self._emit(Op.AND, node=node)
+            elif not is_last:
+                # First comparison (i==0), not last: swap result below saved comparator
+                # stack: [saved_comp, cmp_result] -> SWAP -> [cmp_result, saved_comp]
+                self._emit(Op.SWAP, node=node)
 
     def visit_BoolOp(self, node: ast.BoolOp):
         self.visit(node.values[0])
@@ -550,6 +577,67 @@ class PythonTranspiler(ast.NodeVisitor):
             self._emit(Op.RANDOM, node=node)
             return
 
+        # random.uniform(a, b) -> a + (b - a) * random()
+        if (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "random"
+            and node.func.attr == "uniform"
+        ):
+            if "random" not in self._imports:
+                raise TranspileError(
+                    "random module not imported. Add 'import random'.",
+                    node.lineno,
+                )
+            if len(node.args) != 2:
+                raise TranspileError(
+                    "random.uniform() takes exactly 2 arguments",
+                    node.lineno,
+                )
+            # Inline: a + (b - a) * random()
+            self.visit(node.args[1])       # b
+            self.visit(node.args[0])       # a
+            self._emit(Op.SUB, node=node)  # b - a
+            self._emit(Op.RANDOM, node=node)  # random float [0, 1)
+            self._emit(Op.MUL, node=node)  # (b - a) * random
+            self.visit(node.args[0])       # a
+            self._emit(Op.ADD, node=node)  # a + (b - a) * random
+            return
+
+        # random.gauss(mu, sigma) -> Box-Muller transform
+        if (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "random"
+            and node.func.attr == "gauss"
+        ):
+            if "random" not in self._imports:
+                raise TranspileError(
+                    "random module not imported. Add 'import random'.",
+                    node.lineno,
+                )
+            if len(node.args) != 2:
+                raise TranspileError(
+                    "random.gauss() takes exactly 2 arguments",
+                    node.lineno,
+                )
+            # Box-Muller: mu + sigma * sqrt(-2 * log(u1)) * cos(2 * pi * u2)
+            self._emit(Op.RANDOM, node=node)      # u1
+            self._emit(Op.LOG, node=node)          # log(u1)
+            self._emit(Op.PUSH, -2.0, node=node)   # -2.0
+            self._emit(Op.MUL, node=node)          # -2 * log(u1)
+            self._emit(Op.SQRT, node=node)         # sqrt(-2 * log(u1))
+            self._emit(Op.RANDOM, node=node)       # u2
+            self._emit(Op.PUSH, 6.283185307179586, node=node)  # 2*pi
+            self._emit(Op.MUL, node=node)          # 2*pi*u2
+            self._emit(Op.COS, node=node)          # cos(2*pi*u2)
+            self._emit(Op.MUL, node=node)          # z = sqrt(...) * cos(...)
+            self.visit(node.args[1])               # sigma
+            self._emit(Op.MUL, node=node)          # sigma * z
+            self.visit(node.args[0])               # mu
+            self._emit(Op.ADD, node=node)          # mu + sigma * z
+            return
+
         # random() from "from random import random"
         if (
             isinstance(node.func, ast.Name)
@@ -557,6 +645,69 @@ class PythonTranspiler(ast.NodeVisitor):
             and "_from_random_random" in self._imports
         ):
             self._emit(Op.RANDOM, node=node)
+            return
+
+        # math.* functions
+        _MATH_FUNC_MAP = {
+            "sqrt": Op.SQRT,
+            "sin": Op.SIN,
+            "cos": Op.COS,
+            "exp": Op.EXP,
+            "log": Op.LOG,
+        }
+        if (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "math"
+            and node.func.attr in _MATH_FUNC_MAP
+        ):
+            if "math" not in self._imports:
+                raise TranspileError(
+                    "math module not imported. Add 'import math'.",
+                    node.lineno,
+                )
+            if len(node.args) != 1:
+                raise TranspileError(
+                    f"math.{node.func.attr}() takes exactly 1 argument",
+                    node.lineno,
+                )
+            self.visit(node.args[0])
+            self._emit(_MATH_FUNC_MAP[node.func.attr], node=node)
+            return
+
+        # abs(x) builtin
+        if isinstance(node.func, ast.Name) and node.func.id == "abs":
+            if len(node.args) != 1:
+                raise TranspileError(
+                    "abs() takes exactly 1 argument",
+                    node.lineno,
+                )
+            self.visit(node.args[0])
+            self._emit(Op.ABS, node=node)
+            return
+
+        # min(a, b) builtin
+        if isinstance(node.func, ast.Name) and node.func.id == "min":
+            if len(node.args) != 2:
+                raise TranspileError(
+                    "min() takes exactly 2 arguments",
+                    node.lineno,
+                )
+            self.visit(node.args[0])
+            self.visit(node.args[1])
+            self._emit(Op.MIN, node=node)
+            return
+
+        # max(a, b) builtin
+        if isinstance(node.func, ast.Name) and node.func.id == "max":
+            if len(node.args) != 2:
+                raise TranspileError(
+                    "max() takes exactly 2 arguments",
+                    node.lineno,
+                )
+            self.visit(node.args[0])
+            self.visit(node.args[1])
+            self._emit(Op.MAX, node=node)
             return
 
         # User-defined function call
@@ -600,6 +751,22 @@ class PythonTranspiler(ast.NodeVisitor):
         )
 
     def visit_Attribute(self, node: ast.Attribute):
+        # math.pi and math.e constants
+        if (
+            isinstance(node.value, ast.Name)
+            and node.value.id == "math"
+            and node.attr in ("pi", "e")
+        ):
+            if "math" not in self._imports:
+                raise TranspileError(
+                    "math module not imported. Add 'import math'.",
+                    getattr(node, "lineno", 0),
+                )
+            if node.attr == "pi":
+                self._emit(Op.PUSH, 3.141592653589793, node=node)
+            elif node.attr == "e":
+                self._emit(Op.PUSH, 2.718281828459045, node=node)
+            return
         # Allow random.random etc. to be handled by visit_Call
         pass
 

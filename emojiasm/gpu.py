@@ -66,6 +66,16 @@ GPU_OPCODES: dict[str, int] = {
     # I/O
     "PRINT":   0x50,
     "PRINTLN": 0x51,
+    # Math
+    "POW":     0x15,
+    "SQRT":    0x16,
+    "SIN":     0x17,
+    "COS":     0x18,
+    "EXP":     0x19,
+    "LOG":     0x1A,
+    "ABS":     0x1B,
+    "MIN":     0x1C,
+    "MAX":     0x1D,
     # Random
     "RANDOM":  0x60,
 }

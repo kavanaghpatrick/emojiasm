@@ -17,6 +17,7 @@ from emojiasm.bytecode import (
     _flatten_functions,
     _analyze_max_stack_depth,
     _GPU_MAX_STACK,
+    _STACK_EFFECTS,
 )
 
 
@@ -667,6 +668,36 @@ class TestIntegration:
         assert OP_MAP[Op.OR] in opcodes
         assert OP_MAP[Op.NOT] in opcodes
 
+    def test_math_ops(self):
+        """All 9 new math opcodes encode correctly."""
+        src = (
+            "📥 2\n📥 10\n🔋\n📤\n"    # POW
+            "📥 16\n🌱\n📤\n"           # SQRT
+            "📥 0\n📈\n📤\n"            # SIN
+            "📥 0\n📉\n📤\n"            # COS
+            "📥 0\n🚀\n📤\n"            # EXP
+            "📥 1\n📓\n📤\n"            # LOG
+            "📥 5\n💪\n📤\n"            # ABS
+            "📥 3\n📥 7\n⬇️\n📤\n"     # MIN
+            "📥 3\n📥 7\n⬆️\n📤\n"     # MAX
+            "🛑"
+        )
+        prog = _parse(src)
+        gpu = compile_to_bytecode(prog)
+
+        decoded = _decode_bytecode(gpu.bytecode)
+        opcodes = [op for op, _ in decoded]
+
+        assert OP_MAP[Op.POW] in opcodes
+        assert OP_MAP[Op.SQRT] in opcodes
+        assert OP_MAP[Op.SIN] in opcodes
+        assert OP_MAP[Op.COS] in opcodes
+        assert OP_MAP[Op.EXP] in opcodes
+        assert OP_MAP[Op.LOG] in opcodes
+        assert OP_MAP[Op.ABS] in opcodes
+        assert OP_MAP[Op.MIN] in opcodes
+        assert OP_MAP[Op.MAX] in opcodes
+
     def test_stack_ops(self):
         """Stack manipulation opcodes encode correctly."""
         src = (
@@ -687,3 +718,159 @@ class TestIntegration:
         assert OP_MAP[Op.SWAP] in opcodes
         assert OP_MAP[Op.OVER] in opcodes
         assert OP_MAP[Op.ROT] in opcodes
+
+
+# ── Math opcode bytecode tests ──────────────────────────────────────────
+
+_MATH_OPS = [Op.POW, Op.SQRT, Op.SIN, Op.COS, Op.EXP, Op.LOG, Op.ABS, Op.MIN, Op.MAX]
+
+
+class TestMathOpcodesInOpMap:
+    """Verify OP_MAP contains all 9 new math opcodes."""
+
+    def test_all_math_ops_present(self):
+        for op in _MATH_OPS:
+            assert op in OP_MAP, f"Op.{op.name} missing from OP_MAP"
+
+    def test_math_opcode_values_contiguous(self):
+        """Math opcodes should be 0x15 through 0x1D."""
+        expected = {
+            Op.POW: 0x15, Op.SQRT: 0x16, Op.SIN: 0x17, Op.COS: 0x18,
+            Op.EXP: 0x19, Op.LOG: 0x1A, Op.ABS: 0x1B, Op.MIN: 0x1C,
+            Op.MAX: 0x1D,
+        }
+        for op, code in expected.items():
+            assert OP_MAP[op] == code, (
+                f"Op.{op.name}: expected 0x{code:02X}, got 0x{OP_MAP[op]:02X}"
+            )
+
+    def test_math_ops_in_reverse_map(self):
+        """All 9 math ops should appear in OPCODE_TO_OP."""
+        for op in _MATH_OPS:
+            code = OP_MAP[op]
+            assert code in OPCODE_TO_OP
+            assert OPCODE_TO_OP[code] == op
+
+
+class TestMathOpcodeStackEffects:
+    """Verify _STACK_EFFECTS are defined for all 9 math opcodes."""
+
+    def test_all_math_ops_have_stack_effects(self):
+        for op in _MATH_OPS:
+            assert op in _STACK_EFFECTS, f"Op.{op.name} missing from _STACK_EFFECTS"
+
+    def test_binary_ops_effect_minus_one(self):
+        """Binary ops (POW, MIN, MAX) consume 2, push 1 => net -1."""
+        for op in [Op.POW, Op.MIN, Op.MAX]:
+            assert _STACK_EFFECTS[op] == -1, (
+                f"Op.{op.name}: expected -1, got {_STACK_EFFECTS[op]}"
+            )
+
+    def test_unary_ops_effect_zero(self):
+        """Unary ops (SQRT, SIN, COS, EXP, LOG, ABS) consume 1, push 1 => net 0."""
+        for op in [Op.SQRT, Op.SIN, Op.COS, Op.EXP, Op.LOG, Op.ABS]:
+            assert _STACK_EFFECTS[op] == 0, (
+                f"Op.{op.name}: expected 0, got {_STACK_EFFECTS[op]}"
+            )
+
+
+class TestMathOpcodeRoundTrip:
+    """Verify bytecode roundtrip for programs using math opcodes."""
+
+    def test_pow_roundtrip(self):
+        """PUSH 2, PUSH 10, POW, HALT encodes and decodes correctly."""
+        src = "📥 2\n📥 10\n🔋\n🛑"
+        prog = _parse(src)
+        gpu = compile_to_bytecode(prog)
+
+        decoded = _decode_bytecode(gpu.bytecode)
+        expected_ops = [Op.PUSH, Op.PUSH, Op.POW, Op.HALT]
+        for (opcode, _), expected_op in zip(decoded, expected_ops):
+            assert OPCODE_TO_OP[opcode] == expected_op
+
+    def test_unary_roundtrip(self):
+        """Unary math ops encode and decode correctly."""
+        src = "📥 16\n🌱\n📥 0\n📈\n📥 0\n📉\n📥 0\n🚀\n📥 1\n📓\n📥 5\n💪\n🛑"
+        prog = _parse(src)
+        gpu = compile_to_bytecode(prog)
+
+        decoded = _decode_bytecode(gpu.bytecode)
+        expected_ops = [
+            Op.PUSH, Op.SQRT,
+            Op.PUSH, Op.SIN,
+            Op.PUSH, Op.COS,
+            Op.PUSH, Op.EXP,
+            Op.PUSH, Op.LOG,
+            Op.PUSH, Op.ABS,
+            Op.HALT,
+        ]
+        assert len(decoded) == len(expected_ops)
+        for (opcode, _), expected_op in zip(decoded, expected_ops):
+            assert OPCODE_TO_OP[opcode] == expected_op
+
+    def test_min_max_roundtrip(self):
+        """MIN and MAX encode and decode correctly."""
+        src = "📥 3\n📥 7\n⬇️\n📥 3\n📥 7\n⬆️\n🛑"
+        prog = _parse(src)
+        gpu = compile_to_bytecode(prog)
+
+        decoded = _decode_bytecode(gpu.bytecode)
+        expected_ops = [
+            Op.PUSH, Op.PUSH, Op.MIN,
+            Op.PUSH, Op.PUSH, Op.MAX,
+            Op.HALT,
+        ]
+        assert len(decoded) == len(expected_ops)
+        for (opcode, _), expected_op in zip(decoded, expected_ops):
+            assert OPCODE_TO_OP[opcode] == expected_op
+
+    def test_constant_pool_for_math_program(self):
+        """Constants used by math ops should be in the pool."""
+        src = "📥 2\n📥 10\n🔋\n📥 16\n🌱\n🛑"
+        prog = _parse(src)
+        gpu = compile_to_bytecode(prog)
+
+        assert 2.0 in gpu.constants
+        assert 10.0 in gpu.constants
+        assert 16.0 in gpu.constants
+
+
+class TestMathOpcodeGpuTier:
+    """Verify gpu_tier classification for programs using math opcodes."""
+
+    def test_math_only_is_tier1(self):
+        """Programs using only math ops (no I/O) should be tier 1."""
+        src = "📥 2\n📥 10\n🔋\n📥 16\n🌱\n🛑"
+        prog = _parse(src)
+        assert gpu_tier(prog) == 1
+
+    def test_math_with_println_is_tier2(self):
+        """Math ops + PRINTLN should be tier 2."""
+        src = "📥 2\n📥 10\n🔋\n🖨️\n🛑"
+        prog = _parse(src)
+        assert gpu_tier(prog) == 2
+
+    def test_all_math_ops_tier1(self):
+        """A program using all 9 math ops without I/O is tier 1."""
+        src = (
+            "📥 2\n📥 10\n🔋\n📤\n"    # POW
+            "📥 16\n🌱\n📤\n"           # SQRT
+            "📥 0\n📈\n📤\n"            # SIN
+            "📥 0\n📉\n📤\n"            # COS
+            "📥 0\n🚀\n📤\n"            # EXP
+            "📥 1\n📓\n📤\n"            # LOG
+            "📥 5\n💪\n📤\n"            # ABS
+            "📥 3\n📥 7\n⬇️\n📤\n"     # MIN
+            "📥 3\n📥 7\n⬆️\n📤\n"     # MAX
+            "🛑"
+        )
+        prog = _parse(src)
+        assert gpu_tier(prog) == 1
+
+    def test_gpu_program_tier_matches(self):
+        """GpuProgram.gpu_tier should match gpu_tier() for math programs."""
+        src = "📥 2\n📥 10\n🔋\n🛑"
+        prog = _parse(src)
+        gpu = compile_to_bytecode(prog)
+        assert gpu.gpu_tier == gpu_tier(prog)
+        assert gpu.gpu_tier == 1
