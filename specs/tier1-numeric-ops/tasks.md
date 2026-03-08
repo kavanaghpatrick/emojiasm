@@ -75,7 +75,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
   - _Requirements: AC-1.1 through AC-5.5_
   - _Design: Component 7_
 
-- [ ] 1.8 POC Checkpoint — verify all features work end-to-end on VM
+- [x] 1.8 POC Checkpoint — verify all features work end-to-end on VM
   - **Do**: Run full test suite. Verify all existing tests still pass (regression). Verify all new tests pass. Run a combined example: `import math; print(math.sqrt(2**10)); print(math.sin(math.pi/2)); print(1 < 2 < 3)`
   - **Done when**: All tests pass, combined example works
   - **Verify**: `pytest --tb=short -q`
