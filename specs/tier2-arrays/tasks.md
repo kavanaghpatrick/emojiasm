@@ -139,7 +139,7 @@ After POC validated, extend to all backends.
   - **Commit**: `test(vm): comprehensive array operation tests`
   - _Requirements: AC-1.1 through AC-1.5_
 
-- [ ] 3.2 Transpiler tests for arrays and optimizations
+- [x] 3.2 Transpiler tests for arrays and optimizations
   - **Do**: Add tests in test_transpiler.py (or test_emojiasm.py if no separate file): transpile array allocation, subscript read/write, augmented assignment on subscript, sum()/len(), constant folding (verify instruction count reduced), type inference (verify no unnecessary PUSH 1.0 MUL in division), edge cases (nested subscript error, non-array subscript error).
   - **Files**: `tests/test_transpiler.py` or `tests/test_emojiasm.py`
   - **Done when**: All transpiler array and optimization tests pass
