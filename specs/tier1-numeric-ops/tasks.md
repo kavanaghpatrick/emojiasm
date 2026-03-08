@@ -83,7 +83,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
 
 ## Phase 2: Full Pipeline (Bytecode + Metal + C Compiler)
 
-- [ ] 2.1 Add bytecode encoding for 9 new opcodes
+- [x] 2.1 Add bytecode encoding for 9 new opcodes
   - **Do**: In `bytecode.py`: Add 9 entries to `OP_MAP` (POW=0x15 through MAX=0x1D). Add 9 entries to `_STACK_EFFECTS` (POW=-1, SQRT/SIN/COS/EXP/LOG/ABS=0, MIN=-1, MAX=-1). The `_uses_strings()` function doesn't need changes since new ops are not string ops.
   - **Files**: `emojiasm/bytecode.py`
   - **Done when**: `compile_to_bytecode(parse("📥 2 📥 10 🔋 🛑"))` succeeds without BytecodeError

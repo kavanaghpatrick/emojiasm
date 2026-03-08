@@ -42,6 +42,15 @@ OP_MAP: dict[Op, int] = {
     Op.MUL:     0x12,
     Op.DIV:     0x13,
     Op.MOD:     0x14,
+    Op.POW:     0x15,
+    Op.SQRT:    0x16,
+    Op.SIN:     0x17,
+    Op.COS:     0x18,
+    Op.EXP:     0x19,
+    Op.LOG:     0x1A,
+    Op.ABS:     0x1B,
+    Op.MIN:     0x1C,
+    Op.MAX:     0x1D,
     # Comparison & Logic
     Op.CMP_EQ:  0x20,
     Op.CMP_LT:  0x21,
@@ -247,6 +256,15 @@ _STACK_EFFECTS: dict[Op, int] = {
     Op.MUL:     -1,
     Op.DIV:     -1,
     Op.MOD:     -1,
+    Op.POW:     -1,    # pops 2, pushes 1
+    Op.SQRT:     0,    # pops 1, pushes 1
+    Op.SIN:      0,
+    Op.COS:      0,
+    Op.EXP:      0,
+    Op.LOG:      0,
+    Op.ABS:      0,
+    Op.MIN:     -1,    # pops 2, pushes 1
+    Op.MAX:     -1,    # pops 2, pushes 1
     Op.CMP_EQ:  -1,
     Op.CMP_LT:  -1,
     Op.CMP_GT:  -1,
