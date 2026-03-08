@@ -157,7 +157,7 @@ After POC validated, extend to all backends.
 
 ## Phase 4: Quality Gates
 
-- [ ] 4.1 Local quality check
+- [x] 4.1 Local quality check
   - **Do**: Run full test suite, type check (if configured), lint. Verify all 448+ existing tests still pass. Run example programs to validate no regressions.
   - **Verify**: `pytest && python3 -m emojiasm examples/hello.emoji && python3 -m emojiasm examples/fibonacci.emoji`
   - **Done when**: All commands pass with zero failures
