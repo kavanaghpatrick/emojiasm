@@ -75,7 +75,7 @@ Focus: Get arrays working end-to-end in VM + transpiler. Skip GPU/compiler, acce
   - _Requirements: FR-15, FR-16_
   - _Design: Component J_
 
-- [ ] 1.8 POC Checkpoint
+- [x] 1.8 POC Checkpoint
   - **Do**: Run full test suite. Verify arrays work end-to-end via transpiler + VM. Run existing tests to confirm no regressions.
   - **Done when**: All existing tests pass + new array tests pass
   - **Verify**: `pytest`
