@@ -20,7 +20,7 @@ from .stats import compute_stats
 
 # ── Constants ────────────────────────────────────────────────────────────
 
-DEFAULT_STACK_DEPTH = 128
+DEFAULT_STACK_DEPTH = 256
 DEFAULT_MAX_STEPS = 1_000_000
 DEFAULT_THREADGROUP_SIZE = 256
 

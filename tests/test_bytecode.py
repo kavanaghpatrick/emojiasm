@@ -457,14 +457,14 @@ class TestStackDepth:
         assert depth == 3  # PUSH(1) + DUP(2) + DUP(3)
 
     def test_capped_at_128(self):
-        """Stack depth should never exceed GPU max of 128 (KB #147)."""
-        # Create a program with 200 PUSHes
-        lines = ["📜 🏠"] + ["📥 1"] * 200 + ["🛑"]
+        """Stack depth should never exceed GPU max of 256 (KB #147)."""
+        # Create a program with 300 PUSHes
+        lines = ["📜 🏠"] + ["📥 1"] * 300 + ["🛑"]
         src = "\n".join(lines)
         prog = _parse(src)
         depth = _analyze_max_stack_depth(prog)
         assert depth == _GPU_MAX_STACK
-        assert depth == 128
+        assert depth == 256
 
     def test_max_stack_depth_in_gpu_program(self):
         src = "📥 6\n📥 7\n✖️\n🖨️\n🛑"
