@@ -66,7 +66,7 @@ Focus: Get each feature working end-to-end. Skip edge cases, accept minimal impl
   - _Requirements: FR-9, FR-10_
   - _Design: Component E_
 
-- [ ] 1.7 POC Checkpoint
+- [x] 1.7 POC Checkpoint
   - **Do**: Verify all five features work end-to-end: (1) numpy shim transpiles `np.*` code, (2) auto-parallelization wraps single-instance Python, (3) stats include median/histogram, (4) error messages have suggestions, (5) source maps populated
   - **Done when**: All features demonstrable
   - **Verify**: `pytest tests/ -x -q`
