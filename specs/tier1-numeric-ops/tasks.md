@@ -119,7 +119,7 @@ Focus: Get all 9 opcodes working end-to-end through opcodes + VM + basic tests. 
   - _Requirements: FR-19_
   - _Design: Component 6_
 
-- [ ] 2.5 Add bytecode and GPU tests for new opcodes
+- [x] 2.5 Add bytecode and GPU tests for new opcodes
   - **Do**: In `tests/test_bytecode.py`: Add tests verifying OP_MAP contains all 9 new ops, bytecode encoding roundtrips correctly, stack effects are defined for all new ops, gpu_tier classification is still correct for programs using new ops. In `tests/test_gpu_kernel.py`: Add tests verifying Metal kernel source contains all new opcode constants and switch cases. Test `validate_opcodes()` passes.
   - **Files**: `tests/test_bytecode.py`, `tests/test_gpu_kernel.py`
   - **Done when**: New tests pass
