@@ -62,6 +62,43 @@ class EmojiASMTool:
                 "error": f"Parse error: {exc}",
             }
 
+        return self._execute_program(program, n, t0)
+
+    def execute_python(self, source: str, n: int = 1) -> dict:
+        """Transpile Python source and execute as EmojiASM.
+
+        Args:
+            source: Python source code (subset: arithmetic, loops, random)
+            n: Number of parallel instances (capped at max_instances)
+
+        Returns:
+            Same dict format as execute()
+        """
+        t0 = time.perf_counter()
+        n = min(max(n, 1), self.max_instances)
+
+        try:
+            from .transpiler import transpile
+            program = transpile(source)
+        except Exception as exc:
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            return {
+                "success": False,
+                "mode": "none",
+                "instances": 0,
+                "completed": 0,
+                "failed": 0,
+                "results": [],
+                "stats": {},
+                "total_time_ms": round(elapsed_ms, 2),
+                "program_tier": None,
+                "error": f"Transpile error: {exc}",
+            }
+
+        return self._execute_program(program, n, t0)
+
+    def _execute_program(self, program: Any, n: int, t0: float) -> dict:
+        """Execute an already-parsed Program (shared by execute and execute_python)."""
         # 2. Get GPU tier
         try:
             from .bytecode import gpu_tier

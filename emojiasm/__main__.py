@@ -34,29 +34,62 @@ def main():
     ap.add_argument("--seed", type=int, default=None, help="Base seed for reproducibility")
     ap.add_argument("--gpu", action="store_true", help="Run on GPU via Metal compute kernel")
     ap.add_argument("--gpu-instances", type=int, default=1, help="Number of parallel GPU instances (default: 1)")
+    ap.add_argument("--from-python", metavar="FILE", help="Transpile a .py file to EmojiASM and run it")
+    ap.add_argument("--transpile", metavar="FILE", help="Transpile a .py file and print EmojiASM source")
     args = ap.parse_args()
 
     if args.repl:
         run_repl()
         return
 
-    if args.file is None:
-        ap.error("the following arguments are required: file (or use --repl)")
+    # --transpile: print EmojiASM source from Python file and exit
+    if args.transpile:
+        from .transpiler import transpile_to_source, TranspileError
+        try:
+            with open(args.transpile, "r", encoding="utf-8") as f:
+                py_source = f.read()
+        except FileNotFoundError:
+            print(f"💥 File not found: {args.transpile}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            print(transpile_to_source(py_source))
+        except TranspileError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
+        return
 
-    try:
-        with open(args.file, "r", encoding="utf-8") as f:
-            source = f.read()
-    except FileNotFoundError:
-        print(f"💥 File not found: {args.file}", file=sys.stderr)
-        sys.exit(1)
+    # --from-python: transpile Python file and continue with normal execution
+    if args.from_python:
+        from .transpiler import transpile as py_transpile, TranspileError
+        try:
+            with open(args.from_python, "r", encoding="utf-8") as f:
+                py_source = f.read()
+        except FileNotFoundError:
+            print(f"💥 File not found: {args.from_python}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            program = py_transpile(py_source)
+        except TranspileError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
+    else:
+        if args.file is None:
+            ap.error("the following arguments are required: file (or use --repl)")
 
-    try:
-        base_path = os.path.dirname(os.path.abspath(args.file))
-        seen_files = {os.path.abspath(args.file)}
-        program = parse(source, base_path=base_path, _seen_files=seen_files)
-    except ParseError as e:
-        print(str(e), file=sys.stderr)
-        sys.exit(1)
+        try:
+            with open(args.file, "r", encoding="utf-8") as f:
+                source = f.read()
+        except FileNotFoundError:
+            print(f"💥 File not found: {args.file}", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            base_path = os.path.dirname(os.path.abspath(args.file))
+            seen_files = {os.path.abspath(args.file)}
+            program = parse(source, base_path=base_path, _seen_files=seen_files)
+        except ParseError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
 
     if args.disasm:
         print(disassemble(program))
