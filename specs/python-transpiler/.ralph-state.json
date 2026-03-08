@@ -1,0 +1,13 @@
+{
+  "source": "plan",
+  "name": "python-transpiler",
+  "basePath": "specs/python-transpiler",
+  "phase": "tasks",
+  "taskIndex": 0,
+  "totalTasks": 0,
+  "taskIteration": 1,
+  "maxTaskIterations": 5,
+  "globalIteration": 1,
+  "maxGlobalIterations": 100,
+  "commitSpec": false
+}
