@@ -145,6 +145,149 @@ class LabelGenerator:
         return f"{prefix}{self._counter}"
 
 
+# ── Numpy shim AST rewriter ──────────────────────────────────────────────
+
+# Mapping of np.<func>(x) -> module.func or builtin
+_NP_FUNC_REWRITES: dict[str, tuple[str | None, str]] = {
+    # (module_or_None, function_name)
+    "sqrt": ("math", "sqrt"),
+    "sin": ("math", "sin"),
+    "cos": ("math", "cos"),
+    "exp": ("math", "exp"),
+    "log": ("math", "log"),
+    "abs": (None, "abs"),  # builtin
+}
+
+# Mapping of np.random.<func> -> random.<func>
+_NP_RANDOM_REWRITES: dict[str, str] = {
+    "random": "random",
+    "normal": "gauss",
+    "uniform": "uniform",
+}
+
+# Mapping of np.<constant> -> math.<constant>
+_NP_CONST_REWRITES: dict[str, str] = {
+    "pi": "pi",
+    "e": "e",
+}
+
+
+class _NumpyRewriter(ast.NodeTransformer):
+    """Rewrite numpy calls to stdlib equivalents."""
+
+    def __init__(self, np_alias: str):
+        self._alias = np_alias
+    def _is_np(self, node: ast.expr) -> bool:
+        """Check if node is the numpy alias name."""
+        return isinstance(node, ast.Name) and node.id == self._alias
+
+    def visit_Call(self, node: ast.Call):
+        self.generic_visit(node)  # recurse first
+
+        func = node.func
+        # np.random.random() / np.random.normal() / np.random.uniform()
+        if (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Attribute)
+            and func.value.attr == "random"
+            and self._is_np(func.value.value)
+            and func.attr in _NP_RANDOM_REWRITES
+        ):
+            new_func = ast.Attribute(
+                value=ast.Name(id="random", ctx=ast.Load()),
+                attr=_NP_RANDOM_REWRITES[func.attr],
+                ctx=ast.Load(),
+            )
+            node.func = new_func
+            return node
+
+        # np.sqrt(x), np.sin(x), etc.
+        if (
+            isinstance(func, ast.Attribute)
+            and self._is_np(func.value)
+            and func.attr in _NP_FUNC_REWRITES
+        ):
+            module, fname = _NP_FUNC_REWRITES[func.attr]
+            if module is None:
+                # builtin like abs()
+                node.func = ast.Name(id=fname, ctx=ast.Load())
+            else:
+                node.func = ast.Attribute(
+                    value=ast.Name(id=module, ctx=ast.Load()),
+                    attr=fname,
+                    ctx=ast.Load(),
+                )
+            return node
+
+        return node
+
+    def visit_Attribute(self, node: ast.Attribute):
+        self.generic_visit(node)
+
+        # np.pi -> math.pi, np.e -> math.e
+        if self._is_np(node.value) and node.attr in _NP_CONST_REWRITES:
+            return ast.Attribute(
+                value=ast.Name(id="math", ctx=ast.Load()),
+                attr=_NP_CONST_REWRITES[node.attr],
+                ctx=node.ctx,
+            )
+        return node
+
+
+def _rewrite_numpy(tree: ast.Module) -> ast.Module:
+    """Rewrite numpy calls in the AST to stdlib equivalents.
+
+    Detects ``import numpy as np`` (or ``import numpy``) and rewrites
+    numpy API calls to their random/math/builtin equivalents. The numpy
+    import node is replaced with ``import random`` and ``import math``
+    (if not already present).
+    """
+    np_alias: str | None = None
+    existing_imports: set[str] = set()
+
+    # Pass 1: find numpy import and existing imports
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "numpy":
+                    np_alias = alias.asname or "numpy"
+                else:
+                    existing_imports.add(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                existing_imports.add(node.module)
+
+    if np_alias is None:
+        return tree  # no numpy import found
+
+    # Pass 2: rewrite numpy calls
+    rewriter = _NumpyRewriter(np_alias)
+    tree = rewriter.visit(tree)
+
+    # Pass 3: replace numpy import with random + math imports
+    new_body: list[ast.stmt] = []
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            # Filter out numpy from the import
+            remaining = [a for a in node.names if a.name != "numpy"]
+            if remaining:
+                node.names = remaining
+                new_body.append(node)
+            # Add random and math imports (if not already present)
+            if "random" not in existing_imports:
+                new_body.append(ast.Import(names=[ast.alias(name="random")]))
+                existing_imports.add("random")
+            if "math" not in existing_imports:
+                new_body.append(ast.Import(names=[ast.alias(name="math")]))
+                existing_imports.add("math")
+        else:
+            new_body.append(node)
+
+    tree.body = new_body
+    ast.fix_missing_locations(tree)
+    return tree
+
+
 class PythonTranspiler(ast.NodeVisitor):
     """AST visitor that compiles Python to EmojiASM Program."""
 
@@ -591,7 +734,7 @@ class PythonTranspiler(ast.NodeVisitor):
         self._emit(Op.RET, node=node)
 
     def visit_Import(self, node: ast.Import):
-        allowed = {"random", "math"}
+        allowed = {"random", "math", "numpy"}
         for alias in node.names:
             if alias.name not in allowed:
                 raise TranspileError(
@@ -601,7 +744,7 @@ class PythonTranspiler(ast.NodeVisitor):
             self._imports.add(alias.name)
 
     def visit_ImportFrom(self, node: ast.ImportFrom):
-        allowed = {"random", "math"}
+        allowed = {"random", "math", "numpy"}
         if node.module not in allowed:
             raise TranspileError(
                 f"Unsupported import: '{node.module}'. Only {allowed} are supported.",
@@ -1248,6 +1391,8 @@ def transpile(source: str) -> Program:
         raise TranspileError(
             f"Python syntax error: {e.msg}", e.lineno or 0
         ) from e
+
+    tree = _rewrite_numpy(tree)
 
     compiler = PythonTranspiler()
     compiler.visit_Module(tree)

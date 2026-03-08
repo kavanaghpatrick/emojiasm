@@ -30,7 +30,7 @@ Focus: Get each feature working end-to-end. Skip edge cases, accept minimal impl
   - _Requirements: FR-5_
   - _Design: Component C_
 
-- [ ] 1.3 Add numpy shim AST rewriter
+- [x] 1.3 Add numpy shim AST rewriter
   - **Do**: Add `_rewrite_numpy(tree: ast.Module) -> ast.Module` function in `transpiler.py`. Detect `import numpy as np` (track alias). Walk AST with `ast.NodeTransformer` subclass: rewrite `np.random.random()` -> `random.random()`, `np.random.normal(mu, sigma)` -> `random.gauss(mu, sigma)`, `np.random.uniform(a,b)` -> `random.uniform(a,b)`, `np.sqrt(x)` -> `math.sqrt(x)`, `np.abs(x)` -> `abs(x)`, `np.sin/cos/exp/log(x)` -> `math.sin/cos/exp/log(x)`, `np.pi` -> `math.pi`. Add `import random` and `import math` nodes if not present. Update `visit_Import`/`visit_ImportFrom` to accept `numpy`. Call `_rewrite_numpy` in `transpile()` after `ast.parse()`.
   - **Files**: `emojiasm/transpiler.py`
   - **Done when**: `transpile("import numpy as np\nx = np.random.random()\nresult = np.sqrt(x)")` produces valid Program
